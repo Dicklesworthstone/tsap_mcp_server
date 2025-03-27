@@ -1,0 +1,243 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tsap_mcp_server"
+version = "0.1.0"
+description = "Text Search and Processing (TSAP) MCP Server - Intelligent pattern-based text analysis"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+keywords = ["mcp", "text-processing", "search", "llm", "claude", "pattern-analysis", "document-intelligence"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: General",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Utilities",
+]
+dependencies = [
+    # Framework and API
+    "fastapi>=0.110.0",           # Modern, high-performance web framework
+    "pydantic>=2.5.0",            # Data validation and settings management
+    "uvicorn[standard]>=0.27.0",  # ASGI server
+    "httpx>=0.26.0",              # Asynchronous HTTP client
+    
+    # CLI and Console
+    "typer>=0.9.0",               # Modern CLI library
+    "rich>=13.7.0",               # Beautiful terminal formatting
+    "textual>=0.52.1",            # TUI framework
+    "click>=8.1.7",               # Command line interface toolkit
+    "blessed>=1.20.0",            # Terminal formatting library
+    
+    # Logging and Diagnostics
+    "loguru>=0.7.2",              # Advanced logging
+    "structlog>=24.1.0",          # Structured logging
+    "crashtest>=0.4.1",           # Elegant error handling
+    "tqdm>=4.66.1",               # Progress bars
+    
+    # Async Support
+    "asyncio>=3.4.3",             # Asynchronous I/O
+    "aiofiles>=23.2.1",           # Asynchronous file operations
+    "anyio>=4.2.0",               # Asynchronous compatibility layer
+    "sniffio>=1.3.0",             # Async environment detection
+    
+    # Data Processing
+    "orjson>=3.9.12",             # Fast JSON parser
+    "ujson>=5.9.0",               # Ultra-fast JSON encoder
+    "pyyaml>=6.0.1",              # YAML parser
+    "msgpack>=1.0.7",             # MessagePack serialization
+    "tabulate>=0.9.0",            # Table formatting
+    "pandas>=2.2.0",              # Data analysis
+    
+    # File and Document Processing
+    "pypdf>=4.0.0",               # PDF processing
+    "pdfminer.six>=20231228",     # Advanced PDF text extraction
+    "pymupdf>=1.23.8",            # Fast PDF processing (MuPDF wrapper)
+    "beautifulsoup4>=4.12.2",     # HTML parsing
+    "lxml>=5.1.0",                # XML/HTML processing
+    "html5lib>=1.1",              # HTML5 parser
+    "camelot-py>=0.11.0",         # PDF table extraction
+    "python-docx>=1.0.1",         # Word document processing
+    "python-pptx>=0.6.22",        # PowerPoint processing
+    "openpyxl>=3.1.2",            # Excel processing
+    
+    # Storage and Caching
+    "diskcache>=5.6.3",           # Disk and memory caching
+    "cachetools>=5.3.2",          # In-memory caching utilities
+    "sqlite-utils>=3.36",         # SQLite utilities
+    "sqlitedict>=2.1.0",          # SQLite as a dict
+    
+    # Evolutionary Algorithms
+    "deap>=1.4.0",                # Evolutionary algorithms
+    "distributed>=2024.2.1",      # Distributed computing
+    "dask>=2024.2.1",             # Parallel computing
+    
+    # Pattern Processing
+    "regex>=2023.12.25",          # Enhanced regular expressions
+    "rapidfuzz>=3.6.1",           # Fuzzy string matching
+    "flashtext>=2.7",             # Superfast extract/replace keywords
+    "pyicu>=2.12.1",              # Unicode support
+    
+    # Utilities
+    "tenacity>=8.2.3",            # Retry library
+    "importlib-metadata>=7.0.1",  # Metadata access
+    "shellingham>=1.5.4",         # Shell detection
+    "python-dotenv>=1.0.0",       # Environment variable management
+    "fsspec>=2024.2.0",           # Filesystem interfaces
+    "tldextract>=5.1.1",          # URL/domain parsing
+    "humanize>=4.9.0",            # Human-readable data
+    "validators>=0.22.0",         # Data validation
+    "appdirs>=1.4.4",             # App directories
+    "xxhash>=3.4.1",              # Fast hashing
+    "sortedcontainers>=2.4.0",    # Sorted collection types
+    "more-itertools>=10.1.0",     # Extended iteration utilities
+    "cytoolz>=0.12.2",            # Functional utilities
+    "jsonpath-ng>=1.6.0",         # JSONPath implementation
+    "chardet>=5.2.0",             # Character encoding detection
+    "typing-extensions>=4.9.0",   # Typing extensions
+    "watchfiles>=0.21.0",         # File watching
+    "pluggy>=1.3.0",              # Plugin management
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.14",               # Fast Python linter
+    "black>=24.2.0",              # Code formatter
+    "mypy>=1.7.1",                # Type checker
+    "pytest>=7.4.3",              # Testing framework
+    "pytest-cov>=4.1.0",          # Test coverage
+    "pytest-asyncio>=0.23.2",     # Async test support
+    "pytest-mock>=3.12.0",        # Mocking support
+    "pytest-xdist>=3.5.0",        # Parallel testing
+    "pytest-rich>=0.2.0",         # Rich output for pytest
+    "pytest-benchmark>=4.0.0",    # Benchmarking
+    "pre-commit>=3.5.0",          # Pre-commit hooks
+    "tox>=4.11.4",                # Test automation
+    "coverage>=7.4.1",            # Coverage measurement
+    "hypothesis>=6.92.1",         # Property-based testing
+]
+docs = [
+    "mkdocs>=1.5.3",              # Documentation generator
+    "mkdocs-material>=9.5.3",     # Material theme
+    "mkdocstrings>=0.24.0",       # API documentation
+    "mkdocstrings-python>=1.7.5", # Python docstring support
+    "mkdocs-gen-files>=0.5.0",    # Auto-generated files
+    "mkdocs-literate-nav>=0.6.1", # Navigation generator
+    "mkdocs-section-index>=0.3.8", # Section index
+    "mkdocs-awesome-pages-plugin>=2.9.2", # Page configuration
+    "mkdocs-minify-plugin>=0.7.1", # Minify HTML
+    "mkdocs-git-revision-date-localized-plugin>=1.2.1", # Last update date
+    "mkdocs-redirects>=1.2.1",    # Redirects
+    "mike>=2.0.0",                # Versioning
+]
+performance = [
+    "pyarrow>=14.0.2",            # Apache Arrow implementation
+    "polars>=0.20.0",             # Fast DataFrame library
+    "cython>=3.0.8",              # C-extensions for Python
+    "ninja>=1.11.1",              # Fast builds
+    "snappy>=0.6.1",              # Compression library
+    "ujson>=5.9.0",               # Ultra-fast JSON
+    "lz4>=4.3.2",                 # Fast compression
+    "zstandard>=0.22.0",          # Compression library
+    "numba>=0.58.1",              # JIT compiler
+    "maturin>=1.5.0",             # Rust Python extension builder
+]
+database = [
+    "sqlalchemy>=2.0.27",         # SQL toolkit and ORM
+    "alembic>=1.13.1",            # Database migrations
+    "sqlite-fts4>=1.0.3",         # Full-text search for SQLite
+    "databases[sqlite]>=0.8.0",   # Async database support
+    "asyncpg>=0.29.0",            # PostgreSQL async driver
+    "motor>=3.3.2",               # MongoDB async driver
+    "redis>=4.6.0",               # Redis client
+]
+visualization = [
+    "matplotlib>=3.8.2",          # Plotting library
+    "seaborn>=0.13.1",            # Statistical visualization
+    "networkx>=3.2.1",            # Network graph library
+    "pygraphviz>=1.12",           # Graph visualization
+    "plotly>=5.18.0",             # Interactive visualizations
+    "dash>=2.16.1",               # Interactive web apps
+]
+analysis = [
+    "scipy>=1.12.0",              # Scientific computing
+    "statsmodels>=0.14.1",        # Statistical models
+    "scikit-learn>=1.3.2",        # Machine learning
+    "nltk>=3.8.1",                # Natural language toolkit
+    #"spacy==3.7.2",               # Advanced NLP
+]
+cloud = [
+    "boto3>=1.34.28",             # AWS SDK
+    "google-cloud-storage>=2.13.0", # GCP Storage
+    "azure-storage-blob>=12.19.0", # Azure Blob Storage
+    "docker>=7.0.0",              # Docker API
+    "kubernetes>=29.0.0",         # Kubernetes API
+]
+
+[project.urls]
+Homepage = "https://github.com/Dicklesworthstone/tsap_mcp_server"
+Documentation = "https://username.github.io/tsap_mcp_server"
+Issues = "https://github.com/username/tsap_mcp_server/issues"
+Changelog = "https://github.com/username/tsap_mcp_server/blob/main/CHANGELOG.md"
+
+[project.scripts]
+tsap = "tsap.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tsap"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+select = ["E", "F", "B", "I", "N", "UP", "ANN", "C4", "SIM", "ERA", "RUF"]
+ignore = ["ANN101", "ANN102"]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["ANN"]
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+strict_optional = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "plugin: marks tests as plugin tests",
+    "performance: marks performance benchmark tests",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "examples/*"]
+
+[tool.pluggy]
+# Plugin system configuration
+project_name = "tsap"

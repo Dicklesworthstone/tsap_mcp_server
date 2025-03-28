@@ -5,16 +5,11 @@ This module handles loading, validation, and access to configuration settings
 from various sources (environment variables, config files, command line).
 """
 import os
-import sys
 import json
-import logging
-import pathlib
-from typing import Dict, Any, Optional, Union, List
-from dataclasses import dataclass, field, asdict
+from typing import Dict, Any, Optional, List
 
 import yaml
 from pydantic import BaseModel, Field, validator
-from typing_extensions import Annotated
 
 from tsap.utils.logging import logger
 
@@ -35,7 +30,7 @@ class ServerConfig(BaseModel):
     """Server configuration settings."""
     
     host: str = Field("127.0.0.1", description="Host to bind the server to")
-    port: int = Field(8000, description="Port to bind the server to")
+    port: int = Field(8021, description="Port to bind the server to")
     workers: int = Field(1, description="Number of worker processes")
     debug: bool = Field(False, description="Enable debug mode")
     cors_origins: List[str] = Field(["*"], description="CORS allowed origins")
@@ -178,7 +173,7 @@ def load_config_from_env() -> Dict[str, Any]:
     
     Environment variables should be prefixed with TSAP_.
     Nested keys are separated by double underscore.
-    Example: TSAP_SERVER__PORT=8000
+    Example: TSAP_SERVER__PORT=8021
     
     Returns:
         Configuration dictionary

@@ -242,7 +242,7 @@ def dashboard() -> None:
 @server_app.command("start")
 def server_start(
     host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind to"),
-    port: int = typer.Option(8000, "--port", "-p", help="Port to listen on"),
+    port: int = typer.Option(8021, "--port", "-p", help="Port to listen on"),
     workers: int = typer.Option(1, "--workers", "-w", help="Number of worker processes"),
     log_level: str = typer.Option("info", "--log-level", "-l", help="Log level (debug, info, warning, error)"),
     reload: bool = typer.Option(False, "--reload", "-r", help="Enable auto-reload on code changes (development only)"),

@@ -77,11 +77,11 @@ RUN mkdir -p /app/data /app/logs /app/cache \
 USER tsap
 
 # Expose ports
-EXPOSE 8000
+EXPOSE 8021
 
 # Create volume mount points
 VOLUME ["/app/data", "/app/logs", "/app/cache"]
 
 # Set up entrypoint and default command
 ENTRYPOINT ["python", "-m", "tsap"]
-CMD ["server", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["server", "--host", "0.0.0.0", "--port", "8021"]

@@ -4,7 +4,7 @@ Emoji definitions for TSAP logging system.
 This module contains constants for emojis used in logging to provide visual cues
 about the type and severity of log messages.
 """
-from typing import Dict, Literal
+from typing import Dict
 
 # Log level emojis
 INFO = "ℹ️"
@@ -19,6 +19,7 @@ TRACE = "📍"
 RUNNING = "🔄"
 PENDING = "⏳"
 COMPLETED = "🏁"
+FAILED = "👎"
 STARTING = "🚀"
 STOPPING = "🛑"
 RESTARTING = "🔁"

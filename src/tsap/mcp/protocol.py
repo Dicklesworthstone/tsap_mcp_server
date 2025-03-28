@@ -5,12 +5,11 @@ This module defines the core protocol structures for communication between
 language models and the TSAP server.
 """
 import uuid
-import time
 from enum import Enum
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, model_validator
 
 
 class MCPCommandType(str, Enum):
@@ -132,11 +131,11 @@ class MCPResponse(BaseModel):
         description="Response timestamp (ISO 8601)"
     )
     
-    @root_validator
+    @model_validator(mode='after')
     def validate_status_and_data(cls, values):
         """Validate that status, data, and error are consistent."""
         status = values.get("status")
-        data = values.get("data")
+        data = values.get("data")  # noqa: F841
         error = values.get("error")
         
         if status == "success" and error is not None:

@@ -43,7 +43,7 @@ from tsap.utils.logging.emojis import (
     CRITICAL,
     SUCCESS,
     RUNNING,
-    COMPLETE,
+    COMPLETED,
     FAILED,
 )
 
@@ -328,7 +328,7 @@ __all__ = [
     "CRITICAL",
     "SUCCESS",
     "RUNNING",
-    "COMPLETE",
+    "COMPLETED",
     "FAILED",
     
     # Panels

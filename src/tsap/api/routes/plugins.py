@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Path, status
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Path, status
 
 from tsap.utils.logging import logger
 from tsap.api.dependencies import api_key_dependency
@@ -32,7 +32,7 @@ from tsap.api.models.plugins import (
 router = APIRouter(
     prefix="/plugins",
     tags=["plugins"],
-    dependencies=[Depends(api_key_dependency)],
+    dependencies=[api_key_dependency],
     responses={
         404: {"description": "Not found"},
         500: {"description": "Internal server error"},

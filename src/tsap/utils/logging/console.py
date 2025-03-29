@@ -4,25 +4,23 @@ Rich console configuration for TSAP logging system.
 This module provides a configured Rich console instance for beautiful terminal output,
 along with utility functions for common console operations.
 """
-import sys
 from typing import Optional, Dict, Any, List, Union, Tuple
 from contextlib import contextmanager
 
-from rich.console import Console, ConsoleOptions, RenderResult
+from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 from rich.box import Box, ROUNDED
-from rich.progress import Progress, TaskID, TextColumn, BarColumn, TimeElapsedColumn
-from rich.progress import TimeRemainingColumn, SpinnerColumn, ProgressColumn
+from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn
+from rich.progress import TimeRemainingColumn, SpinnerColumn
 from rich.status import Status
 from rich.syntax import Syntax
 from rich.traceback import install as install_rich_traceback
 from rich.live import Live
 from rich.tree import Tree
-from rich.style import Style
 
-from .themes import RICH_THEME, get_level_style, get_component_style
+from .themes import RICH_THEME
 
 # Configure global console with our theme
 console = Console(
@@ -243,3 +241,12 @@ def live_display(**kwargs):
     """
     with Live(console=console, **kwargs) as live:
         yield live
+
+# --- Factory Function for dictConfig ---
+
+def get_rich_console() -> Console:
+    """Returns the globally configured Rich console instance.
+    
+    Used by logging.config.dictConfig to resolve the console reference.
+    """
+    return console

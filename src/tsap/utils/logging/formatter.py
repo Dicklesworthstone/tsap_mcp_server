@@ -6,23 +6,20 @@ with consistent styling and visual elements.
 """
 import time
 import logging
-import traceback
-from typing import Dict, Any, List, Optional, Tuple, Callable, Union
+from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
 from rich.console import Console, ConsoleRenderable
 from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
-from rich.syntax import Syntax
 from rich.logging import RichHandler
 from rich.traceback import Traceback
-from rich.box import Box, ROUNDED
 from rich.style import Style
 from rich.columns import Columns
 
 from .emojis import LEVEL_EMOJIS, get_emoji
-from .themes import get_level_style, get_component_style, get_color
+from .themes import get_level_style, get_component_style
 
 class TSAPLogRecord:
     """Enhanced log record with additional TSAP-specific fields."""
@@ -330,3 +327,23 @@ class RichLoggingHandler(RichHandler):
         
         # Use our formatter
         return self.tsap_formatter.format_record(tsap_record)
+
+# Add factory function for dictConfig
+def create_rich_console_handler(**kwargs):
+    """Factory function to create a RichLoggingHandler for dictConfig."""
+    # Import console instance here to avoid circular import issues at module level
+    from .console import console
+
+    # Get level if passed from config, default otherwise
+    level = kwargs.get("level", logging.INFO)
+    # Note: Formatter is implicitly handled by the handler itself or needs config?
+    # If formatter needs config, it gets more complex. Assuming default/internal for now.
+
+    return RichLoggingHandler(
+        level=level,
+        console=console,
+        show_path=kwargs.get("show_path", False),
+        markup=kwargs.get("markup", True),
+        rich_tracebacks=kwargs.get("rich_tracebacks", True)
+        # Add other relevant kwargs if needed by RichLoggingHandler
+    )

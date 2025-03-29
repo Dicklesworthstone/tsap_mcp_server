@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import sys
+import argparse
 from rich import print as rich_print
 from rich.panel import Panel
 from rich.table import Table
@@ -18,9 +19,10 @@ from mcp_client_example import MCPClient  # Import our existing client
 
 console = Console()
 
-async def search_documents():
-    """Search for MCP-related content in example documents."""
-    rich_print(Panel("[bold blue]Search MCP-related Content in Documents[/bold blue]", expand=False))
+async def search_documents(pattern: str, paths: list[str], file_patterns: list[str], context_lines: int):
+    """Search for content in example documents using specified parameters."""
+    rich_print(Panel(f"[bold blue]Search Documents: '{pattern}'[/bold blue]", expand=False))
+    rich_print(f"Paths: {paths}\nFile Patterns: {file_patterns}\nContext: {context_lines}")
     
     try:
         async with MCPClient() as client:
@@ -34,13 +36,13 @@ async def search_documents():
                console.print("[green]Initial client.info() check successful.[/green]")
             # ------------------------------
 
-            # Use ripgrep to search for "MCP" in the example documents
-            rich_print("\n[bold]Searching for MCP in example documents...[/bold]")
+            # Use ripgrep to search using provided parameters
+            rich_print(f"\n[bold]Searching for '{pattern}'...[/bold]")
             search_response = await client.ripgrep_search(
-                pattern="MCP",
-                paths=["tsap_example_data/documents/"],
-                file_patterns=["*.md", "*.txt", "*.json"],
-                context_lines=2
+                pattern=pattern,
+                paths=paths,
+                file_patterns=file_patterns,
+                context_lines=context_lines
             )
             
             # Print the raw response for debugging (only in verbose mode)
@@ -54,10 +56,10 @@ async def search_documents():
                         matches = search_response["data"]["matches"]
                         match_count = len(matches)
                         
-                        rich_print(f"\n[green]Found {match_count} matches for 'MCP' in documents[/green]")
+                        rich_print(f"\n[green]Found {match_count} matches for '{pattern}'[/green]")
                         
                         # Display matches in a table
-                        table = Table(title=f"MCP Content in Documents ({match_count} matches)")
+                        table = Table(title=f"Search Results for '{pattern}' ({match_count} matches)")
                         table.add_column("File", style="cyan", no_wrap=True)
                         table.add_column("Line", style="yellow", justify="right")
                         table.add_column("Content", style="white", max_width=80)
@@ -103,4 +105,48 @@ async def search_documents():
         rich_print(traceback.format_exc())
 
 if __name__ == "__main__":
-    asyncio.run(search_documents()) 
+    # --- Add Argument Parsing ---
+    parser = argparse.ArgumentParser(description="Search documents using TSAP Ripgrep via MCPClient.")
+    parser.add_argument(
+        "-p", "--pattern",
+        type=str,
+        default="MCP",
+        help="The text pattern to search for (default: MCP)"
+    )
+    parser.add_argument(
+        "--paths",
+        nargs='+',
+        default=["tsap_example_data/documents/"],
+        help="List of paths (files or directories) to search in (default: tsap_example_data/documents/)"
+    )
+    parser.add_argument(
+        "--file-patterns",
+        nargs='+',
+        default=["*.md", "*.txt", "*.json"],
+        help="Glob patterns for file types to include (default: *.md *.txt *.json)"
+    )
+    parser.add_argument(
+        "-C", "--context-lines",
+        type=int,
+        default=2,
+        help="Number of context lines to show around matches (default: 2)"
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print the raw JSON response from the server"
+    )
+    args = parser.parse_args()
+
+    # Add --verbose to sys.argv if set, for the existing check within the function
+    if args.verbose:
+        if "--verbose" not in sys.argv:
+             sys.argv.append("--verbose")
+
+    # Run the async function with parsed arguments
+    asyncio.run(search_documents(
+        pattern=args.pattern,
+        paths=args.paths,
+        file_patterns=args.file_patterns,
+        context_lines=args.context_lines
+    )) 

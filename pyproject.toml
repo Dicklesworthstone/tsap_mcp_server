@@ -111,6 +111,7 @@ dependencies = [
     "pluggy>=1.3.0",              # Plugin management
     "argon2",                     # Password hashing
     "pyzipper",                   # Zip utilities
+    "python-multipart",           # 
     
     # Semantic search and vector operations (CPU version by default)
     "faiss-cpu>=1.7.0",           # FAISS CPU for vector search
@@ -121,6 +122,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional dependency for GPU-accelerated Faiss
+gpu = [
+    "faiss-gpu>=1.7.0,<1.8.0",      # FAISS GPU for vector search (requires CUDA)
+]
 dev = [
     "ruff>=0.1.14",               # Fast Python linter
     "black>=24.2.0",              # Code formatter
@@ -206,7 +211,6 @@ semantic = [
 
 # Full dependency group that includes everything (CPU version only)
 all = [
-    "faiss-cpu>=1.7.0",           # FAISS CPU version
     "nomic>=3.0.8",               # Embedding models 
     "torch>=2.0.0",               # PyTorch
     "numpy>=1.24.0",              # Required for arrays

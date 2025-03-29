@@ -6,6 +6,7 @@ progress tracking, and console output for the TSAP system.
 """
 
 import logging
+import logging.handlers
 from typing import Dict, Any, Optional, List
 
 # Import Rich-based console
@@ -84,48 +85,8 @@ from tsap.utils.logging.formatter import (
 # Create a global logger instance for importing
 logger = Logger("tsap")
 
-# Configure root logger
-def configure_root_logger(level: str = "INFO", log_file: Optional[str] = None) -> None:
-    """Configure the root logger with rich formatting.
-    
-    Args:
-        level: Log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-        log_file: Optional path to log file
-    """
-    # Convert level string to logging level
-    logging_level = getattr(logging, level.upper(), logging.INFO)
-    
-    # Clear existing handlers
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-    
-    # Set level
-    root_logger.setLevel(logging_level)
-    
-    # Add rich handler
-    rich_handler = RichLoggingHandler(
-        level=logging_level,
-        console=console,
-        show_time=True,
-        show_level=True,
-        show_path=False,
-    )
-    root_logger.addHandler(rich_handler)
-    
-    # Add file handler if specified
-    if log_file:
-        try:
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setLevel(logging_level)
-            file_formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            file_handler.setFormatter(file_formatter)
-            root_logger.addHandler(file_handler)
-        except Exception as e:
-            logger.error(f"Failed to create log file handler: {e}")
-
+# Removed configure_root_logger, initialize_logging, set_log_level functions
+# Logging is now configured via dictConfig in server.py
 
 def get_logger(name: str) -> Logger:
     """Get a logger for a specific component.
@@ -138,16 +99,6 @@ def get_logger(name: str) -> Logger:
     """
     return Logger(name)
 
-
-def set_log_level(level: str) -> None:
-    """Set the log level for the global logger.
-    
-    Args:
-        level: Log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-    """
-    logger.set_level(level)
-
-
 def capture_logs(level: Optional[str] = None) -> "LogCapture":
     """Create a context manager to capture logs.
     
@@ -158,7 +109,6 @@ def capture_logs(level: Optional[str] = None) -> "LogCapture":
         Log capture context manager
     """
     return LogCapture(level)
-
 
 # Log capturing for testing
 class LogCapture:
@@ -262,34 +212,6 @@ class LogCapture:
         """
         return any(text in message for message in self.get_messages(level))
 
-
-# Initialize the logging system
-def initialize_logging(
-    level: str = "INFO",
-    log_file: Optional[str] = None,
-    show_time: bool = True,
-    show_level: bool = True,
-    show_path: bool = False,
-) -> None:
-    """Initialize the TSAP logging system.
-    
-    Args:
-        level: Log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-        log_file: Optional path to log file
-        show_time: Whether to show timestamp in console logs
-        show_level: Whether to show log level in console logs
-        show_path: Whether to show file path in console logs
-    """
-    # Configure root logger
-    configure_root_logger(level, log_file)
-    
-    # Set global logger level
-    logger.set_level(level)
-    
-    # Log initialization message
-    logger.info(f"TSAP logging initialized (level: {level})")
-
-
 __all__ = [
     # Console
     "console",
@@ -313,9 +235,6 @@ __all__ = [
     "critical",
     "section",
     "get_logger",
-    "set_log_level",
-    "configure_root_logger",
-    "initialize_logging",
     "capture_logs",
     "LogCapture",
     

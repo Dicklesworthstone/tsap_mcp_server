@@ -4,10 +4,12 @@ TSAP MCP Server implementation.
 This module provides the main server functionality that listens for MCP
 requests and dispatches them to the appropriate handlers.
 """
-import signal
 import asyncio
 from typing import Optional, Any
 from contextlib import asynccontextmanager
+import os
+import logging
+import logging.config
 
 import uvicorn
 from fastapi import FastAPI, APIRouter
@@ -20,7 +22,89 @@ from tsap.version import __version__, get_version_info
 from tsap.performance_mode import get_performance_mode
 from tsap.mcp.protocol import MCPRequest
 from tsap.mcp.handler import handle_request, initialize_handlers
+from tsap.api.app import api_router
 
+
+# --- Define Logging Configuration Dictionary ---
+
+LOG_FILE_PATH = "logs/tsap.log"
+
+# Ensure log directory exists before config is used
+log_dir = os.path.dirname(LOG_FILE_PATH)
+if log_dir:
+    os.makedirs(log_dir, exist_ok=True)
+
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False, # Let Uvicorn's loggers pass through if needed
+    "formatters": {
+        "default": {
+            "()": "uvicorn.logging.DefaultFormatter",
+            "fmt": "%(levelprefix)s %(message)s",
+            "use_colors": None,
+        },
+        "access": {
+            "()": "uvicorn.logging.AccessFormatter",
+            "fmt": '%(levelprefix)s %(client_addr)s - \"%(request_line)s\" %(status_code)s',
+        },
+        "rich": { # Formatter for Rich console output (can be simpler)
+             "format": "%(message)s",
+             "datefmt": "[%X]",
+        },
+         "file": { # Formatter for file output
+             "format": "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s",
+             "datefmt": "%Y-%m-%d %H:%M:%S",
+         },
+    },
+    "handlers": {
+        "default": { # Default Uvicorn console handler (might be replaced by Rich)
+            "formatter": "default",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+        },
+        "access": { # Uvicorn access log handler
+            "formatter": "access",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+        },
+        "rich_console": { # Our Rich console handler using a factory
+             # "class": "tsap.utils.logging.formatter.RichLoggingHandler",
+             # "formatter": "rich", # Formatter might be set internally by handler or factory
+             # "level": "DEBUG", # Level is set on the logger/root now
+             # "console": "ext://tsap.utils.logging.console.get_rich_console",
+             # "show_path": False,
+             # "markup": True,
+             # "rich_tracebacks": True,
+             "()": "tsap.utils.logging.formatter.create_rich_console_handler",
+             # Pass other necessary args to the factory if needed, e.g.:
+             # "level": "DEBUG", # Set level via factory if desired 
+             # "show_path": False, 
+        },
+        "rotating_file": { # Our rotating file handler
+             "class": "logging.handlers.RotatingFileHandler",
+             "formatter": "file",
+             "level": "DEBUG", # Set default level here, will be overridden
+             "filename": LOG_FILE_PATH,
+             "maxBytes": 2 * 1024 * 1024, # 2 MB
+             "backupCount": 5,
+             "encoding": "utf-8",
+        },
+    },
+    "loggers": {
+        "uvicorn": {"handlers": ["rich_console"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"level": "INFO", "propagate": True}, # Propagate errors to root
+        "uvicorn.access": {"handlers": ["access", "rotating_file"], "level": "INFO", "propagate": False},
+        "tsap": { # Our application's logger namespace
+             "handlers": ["rich_console", "rotating_file"],
+             "level": "DEBUG", # Default level, will be overridden by root level typically
+             "propagate": False,
+         },
+    },
+     "root": { # Root logger configuration
+         "level": "DEBUG", # Default level, will be overridden
+         "handlers": ["rich_console", "rotating_file"], # Root catches logs not handled by specific loggers
+     },
+}
 
 # Global server instance
 _server_app = None
@@ -101,20 +185,10 @@ async def lifespan(app: FastAPI):
     Args:
         app: FastAPI application instance
     """
-    # Startup
-    logger.startup(
-        __version__,
-        component="server",
-        mode=get_performance_mode(),
-        context={"api_version": get_version_info()["api_version"]}
-    )
+    # Startup logging is now handled by the dictConfig
+    # logger.startup(...) can still be used if needed for specific messages
     
     try:
-        # Register signal handlers for graceful shutdown
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop = asyncio.get_event_loop()
-            loop.add_signal_handler(sig, _shutdown_event.set)
-            
         # Make sure MCP handlers are initialized
         initialize_handlers()
             
@@ -134,17 +208,8 @@ async def lifespan(app: FastAPI):
         yield
         
     finally:
-        # Shutdown
-        logger.info(
-            "Shutting down TSAP MCP Server...",
-            component="server",
-            operation="shutdown"
-        )
-        
-        # Cleanup
-        # TODO: Implement cleanup tasks
-        
-        logger.shutdown(component="server")
+        # Shutdown logging handled by dictConfig
+        logger.info("Server shutdown sequence initiated.") # Example specific message
 
 
 def create_server() -> FastAPI:
@@ -181,7 +246,7 @@ def create_server() -> FastAPI:
     )
     
     # Add routers
-    app.include_router(_create_api_router(), prefix="/api")
+    app.include_router(api_router, prefix="/api")
     app.include_router(_create_mcp_router(), prefix="/mcp")
     
     # Add health check route
@@ -204,28 +269,6 @@ def create_server() -> FastAPI:
     _server_app = app
     
     return app
-
-
-def _create_api_router() -> APIRouter:
-    """Create the API router.
-    
-    Returns:
-        Configured APIRouter for the API
-    """
-    router = APIRouter(tags=["api"])
-    
-    @router.get("/")
-    async def api_root():
-        """API root endpoint."""
-        return {
-            "name": "TSAP MCP Server API",
-            "version": get_version_info()["api_version"],
-            "documentation": "/docs",
-        }
-    
-    # TODO: Add other API routes (core, composite, analysis, etc.)
-    
-    return router
 
 
 def _create_mcp_router() -> APIRouter:
@@ -295,67 +338,6 @@ def _create_mcp_router() -> APIRouter:
             print(f"ERROR RESPONSE: {truncate_repr(error_content)}") # Log truncated error
             return response
 
-        # # The following section seems redundant with the initial logging and truncation logic above.
-        # # Commenting it out to avoid double logging/processing. If needed, integrate its logic
-        # # more cleanly into the initial print statements.
-
-        # # Log received request (truncate 'texts' if present)
-        # log_request_repr = repr(request)
-        # try:
-        #     # Check if args exist and contain 'texts'
-        #     if hasattr(request, 'args') and isinstance(request.args, dict) and 'texts' in request.args:
-        #         # Create a copy to modify for logging
-        #         log_args = request.args.copy()
-        #         texts_value = log_args['texts']
-        #         truncated_texts_repr = "[...some texts...]"
-        #         num_items = 0
-
-        #         if isinstance(texts_value, list):
-        #             num_items = len(texts_value)
-        #             truncated_list = []
-        #             # Truncate each text item if it's a long string
-        #             for i, text_item in enumerate(texts_value):
-        #                 if i < 3: # Show first few items truncated
-        #                     if isinstance(text_item, str) and len(text_item) > 100:
-        #                         truncated_list.append(f"'{text_item[:100]}... (truncated)'")
-        #                     else:
-        #                         # Keep short strings or non-string items as is (using repr)
-        #                         truncated_list.append(repr(text_item))
-        #                 elif i == 3:
-        #                     truncated_list.append("...") # Indicate more items were truncated
-        #                     break # Stop after showing ellipsis
-        #             truncated_texts_repr = f"[{', '.join(truncated_list)}] ({num_items} items total)"
-        #         elif isinstance(texts_value, str) and len(texts_value) > 200:
-        #             num_items = 1
-        #             truncated_texts_repr = f"'{texts_value[:200]}... (truncated {len(texts_value) - 200} chars)'"
-        #         else:
-        #              # Handle other types or short strings by just showing the type/count
-        #             num_items = 1 if not isinstance(texts_value, list) else len(texts_value)
-        #             truncated_texts_repr = f"<{type(texts_value).__name__} object ({num_items} item(s))>"
-
-        #         log_args['texts'] = truncated_texts_repr # Replace in the copied dict
-
-        #         # Reconstruct a limited repr for logging, showing command, ID, and modified args
-        #         log_request_repr = f"MCPRequest(request_id='{request.request_id}', command='{request.command}', args={log_args})"
-        # except Exception as log_exc: # Catch potential errors during log formatting
-        #     logger.warning(f"Failed to format request args for logging: {log_exc}")
-        #     # Fallback to default repr if formatting fails
-        #     log_request_repr = repr(request)
-
-        # print(f"REQUEST RECEIVED: {log_request_repr}") # This seems redundant
-
-        # # Process request (This was already done above before the response logging)
-        # mcp_response = await handle_request(request) # This line is duplicated
-
-        # logger.success( # This logger call is also duplicated from the try block
-        #     f"Completed MCP request: {request.command}",
-        #     component="mcp",
-        #     operation="response",
-        #     context={"request_id": request.request_id}
-        # )
-
-        # return mcp_response # This return is duplicated
-
 
     return router
 
@@ -367,48 +349,37 @@ def start_server(
     log_level: Optional[str] = None,
     reload: bool = False,
 ) -> None:
-    """Start the TSAP MCP Server.
-    
-    Args:
-        host: Host to bind to (overrides config)
-        port: Port to bind to (overrides config)
-        workers: Number of worker processes (overrides config)
-        log_level: Logging level (overrides config)
-        reload: Whether to enable auto-reload
-    """
-    # Get configuration
+    """Start the TSAP MCP Server using dictConfig for logging."""
     config = get_config()
-    
-    # Override config with parameters if provided
     server_host = host or config.server.host
     server_port = port or config.server.port
     server_workers = workers or config.server.workers
-    server_log_level = log_level or config.server.log_level
-    
-    # Create server if not already created
-    app = create_server()  # noqa: F841
-    
-    # Log startup info
-    logger.info(
-        f"Starting TSAP MCP Server on {server_host}:{server_port}",
-        component="server",
-        operation="start",
-        context={
-            "host": server_host,
-            "port": server_port,
-            "workers": server_workers,
-            "log_level": server_log_level,
-            "reload": reload,
-        }
-    )
-    
-    # Start server with Uvicorn
+    # Determine final log level (passed in from __main__ which considers verbose/config)
+    final_log_level = (log_level or config.server.log_level).upper()
+
+    # --- Update LOGGING_CONFIG with the final level ---
+    LOGGING_CONFIG["root"]["level"] = final_log_level
+    # LOGGING_CONFIG["handlers"]["rich_console"]["level"] = final_log_level # Level set via logger/root
+    # LOGGING_CONFIG["handlers"]["rotating_file"]["level"] = final_log_level # Level set via logger/root
+    LOGGING_CONFIG["loggers"]["tsap"]["level"] = final_log_level
+    # Set Uvicorn access level based on final level (e.g., hide access logs if CRITICAL)
+    LOGGING_CONFIG["loggers"]["uvicorn.access"]["level"] = final_log_level if final_log_level != "CRITICAL" else "CRITICAL"
+    # Ensure Uvicorn base/error logs are at least INFO unless final level is DEBUG
+    uvicorn_base_level = "INFO" if final_log_level not in ["DEBUG"] else "DEBUG"
+    LOGGING_CONFIG["loggers"]["uvicorn"]["level"] = uvicorn_base_level
+    LOGGING_CONFIG["loggers"]["uvicorn.error"]["level"] = uvicorn_base_level
+
+    # Log startup info using the standard logger BEFORE Uvicorn takes over logging
+    # This might still use basic config if Uvicorn hasn't processed dictConfig yet
+    logging.info(f"Preparing to start Uvicorn on {server_host}:{server_port}...") 
+
+    # Start server with Uvicorn using the dictConfig
     uvicorn.run(
-        "tsap.server:create_server",
+        "tsap.server:create_server", # Use factory pattern
         host=server_host,
         port=server_port,
         workers=server_workers,
-        log_level=server_log_level.lower(),
+        log_config=LOGGING_CONFIG, # Pass the config dict
         reload=reload,
         factory=True,
     )

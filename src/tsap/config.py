@@ -61,7 +61,7 @@ class CacheConfig(BaseModel):
     
     enabled: bool = Field(True, description="Enable caching")
     directory: str = Field("~/.cache/tsap", description="Cache directory")
-    max_size: int = Field(1024, description="Maximum cache size in MB")
+    max_size: int = Field(100, description="Maximum cache size in MB")
     ttl: int = Field(86400, description="Default TTL for cache entries in seconds")
     invalidation_strategy: str = Field("lru", description="Cache invalidation strategy")
     
@@ -90,6 +90,12 @@ class PerformanceConfig(BaseModel):
         return v.lower()
 
 
+class PluginsConfig(BaseModel):
+    """Plugins configuration settings."""
+    
+    auto_load: bool = Field(False, description="Automatically load plugins at startup")
+
+
 class TSAPConfig(BaseModel):
     """Main TSAP configuration model."""
     
@@ -97,6 +103,7 @@ class TSAPConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    plugins: PluginsConfig = Field(default_factory=PluginsConfig)
     plugins_directory: str = Field("~/.tsap/plugins", description="Plugins directory")
     templates_directory: str = Field("~/.tsap/templates", description="Templates directory")
     storage_directory: str = Field("~/.tsap/storage", description="Storage directory")

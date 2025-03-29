@@ -59,7 +59,7 @@ class EvolutionConfigRequest(BaseModel):
     parallelism: int = Field(4, description="Number of parallel evaluations")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "population_size": 30,
                 "generations": 20,
@@ -91,7 +91,7 @@ class PatternEvolutionRequest(EvolutionRequest):
     initial_patterns: Optional[List[str]] = Field(None, description="Initial patterns to start with")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "description": "Email pattern",
@@ -123,7 +123,7 @@ class StrategyEvolutionRequest(EvolutionRequest):
     training_queries: List[Dict[str, Any]] = Field(..., description="Queries with expected results for training")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "objective": "Find security vulnerabilities in code",
@@ -153,7 +153,7 @@ class JournalEntryRequest(BaseModel):
     params: Union[Dict[str, Any], StrategyJournalParams] = Field(..., description="Journal entry parameters")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "strategy_id": "s123456",
@@ -177,7 +177,7 @@ class JournalAnalysisRequest(BaseModel):
     min_effectiveness: Optional[float] = Field(None, description="Minimum effectiveness score")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "strategy_id": "s123456",
                 "date_range": ["2023-01-01", "2023-06-30"],
@@ -192,7 +192,7 @@ class RuntimeLearningRequest(BaseModel):
     params: Union[Dict[str, Any], RuntimeLearningParams] = Field(..., description="Runtime learning parameters")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "learning_type": "pattern_optimization",
@@ -212,7 +212,7 @@ class OfflineLearningRequest(BaseModel):
     params: Union[Dict[str, Any], OfflineLearningParams] = Field(..., description="Offline learning parameters")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "learning_type": "strategy_optimization",
@@ -319,3 +319,23 @@ class EvolutionJobStatusResponse(BaseModel):
         if v not in allowed_statuses:
             raise ValueError(f"Status must be one of: {', '.join(allowed_statuses)}")
         return v
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "job_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                "type": "pattern_evolution",
+                "status": "running",
+                "submitted_at": "2023-10-27T10:00:00Z",
+                "started_at": "2023-10-27T10:01:00Z",
+                "completed_at": None,
+                "progress": 50.0,
+                "current_generation": 5,
+                "total_generations": 10,
+                "best_fitness": 0.85,
+                "message": "Evolved 5 of 10 generations. Best fitness: 0.8500",
+                "result": None,
+                "error": None,
+                "execution_time": None
+            }
+        }

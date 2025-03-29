@@ -5,9 +5,10 @@ from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any, Optional
 import traceback
 import inspect
+import os
 
-# Configure logging
-logger = logging.getLogger(__name__)
+# Import the custom TSAP logger
+from tsap.utils.logging import logger 
 
 # Try to import faiss, preferring GPU version but falling back to CPU version
 try:
@@ -124,7 +125,10 @@ class SemanticSearchTool(BaseCoreTool):
         self._load_embedding_model()
         
         # Try to create the index immediately to fail fast if there are issues
-        self._create_index()
+        # Check if index creation should happen here or be deferred
+        if self.index is None:
+            self.index = self._create_index()
+            logger.debug("FAISS index created during tool initialization.")
     
     def _load_embedding_model(self):
         """Load the embedding model using SentenceTransformers."""
@@ -135,14 +139,34 @@ class SemanticSearchTool(BaseCoreTool):
             # Log which model we're loading with detailed info
             logger.info(f"Loading embedding model {self.embedding_model_name} on {device}")
             
+            # Construct expected local cache path
+            # Replace characters unsafe for filenames, commonly '/' becomes '_' or '--'
+            # Let's assume '--' as that's common with huggingface_hub caching
+            # safe_model_name = self.embedding_model_name.replace('/', '--') # More robust check might be needed
+            # cache_dir = os.path.expanduser("~/.cache/torch/sentence_transformers")
+            # local_model_path = os.path.join(cache_dir, safe_model_name)
+            
+            # Simpler common path for nomic-ai models if downloaded via sentence-transformers
+            # Note: This path might vary based on library versions and caching strategy.
+            # It's generally safer to let SentenceTransformer manage caching unless offline is strictly required.
+            assumed_cache_path = os.path.expanduser(f"~/.cache/torch/sentence_transformers/{self.embedding_model_name.replace('/', '_')}")
+            
+            model_load_path = self.embedding_model_name # Default to Hub name
+            
+            if os.path.exists(assumed_cache_path):
+                logger.info(f"Found potential local cache for model at: {assumed_cache_path}. Attempting to load from local path.")
+                model_load_path = assumed_cache_path
+            else:
+                logger.warning(f"Local cache path {assumed_cache_path} not found. Will load from Hugging Face Hub (requires internet).", operation="_load_embedding_model")
+            
             # Detect if this is a Nomic model which might need special handling
             is_nomic_model = "nomic" in self.embedding_model_name.lower()
             if is_nomic_model:
                 logger.info(f"Detected Nomic model: {self.embedding_model_name}, using specialized handling if needed")
             
-            # Load model
+            # Load model using either the Hub name or the found local path
             self.embedding_model = SentenceTransformer(
-                self.embedding_model_name,
+                model_load_path, # Use determined path
                 device=device,
                 trust_remote_code=True
             )

@@ -8,7 +8,7 @@ from rich import print as rich_print
 from rich.panel import Panel
 
 # --- Configuration ---
-BASE_URL = os.environ.get("TSAP_BASE_URL", "http://127.0.0.1:8000")
+BASE_URL = os.environ.get("TSAP_BASE_URL", "http://127.0.0.1:8021")
 API_KEY = os.environ.get("TSAP_API_KEY", "your-default-api-key") # Replace with your actual API key or use env var
 
 # --- API Client Class ---

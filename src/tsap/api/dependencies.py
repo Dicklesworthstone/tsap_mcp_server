@@ -3,8 +3,7 @@ Dependencies for FastAPI routes in the TSAP MCP Server API.
 """
 
 from fastapi import Depends, HTTPException, Header, Request, status
-from typing import Dict, Any, Optional, List, Callable, Awaitable
-import asyncio
+from typing import Optional
 from contextlib import asynccontextmanager
 
 from tsap.utils.logging import logger
@@ -27,8 +26,8 @@ async def get_api_key(api_key: str = Header(None)) -> str:
     """
     config = get_config()
     
-    # If auth is not enabled, return None
-    if not config.server.extra.get("api_auth_enabled", False):
+    # If auth is not enabled, check the global config extra field
+    if not config.extra.get("api_auth_enabled", False):
         return None
     
     if api_key is None:
@@ -64,7 +63,7 @@ async def get_performance_mode_from_request(
     Returns:
         Valid performance mode string
     """
-    config = get_config()
+    config = get_config()  # noqa: F841
     
     # If mode is provided in query parameters, use it
     if mode is not None:

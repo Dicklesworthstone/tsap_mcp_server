@@ -574,18 +574,25 @@ async def batch_profile_documents(
     This endpoint creates profiles for multiple documents and optionally
     compares them to identify similarities and differences.
     """
+    logger.debug(f"Received batch_profile request for {len(request.document_paths)} documents.", operation="batch_profile")
+    
     # Handle large batches
     if request.max_documents is not None and len(request.document_paths) > request.max_documents:
+        logger.debug(f"Truncating document list from {len(request.document_paths)} to {request.max_documents}", operation="batch_profile")
         request.document_paths = request.document_paths[:request.max_documents]
     
     try:
+        effective_performance_mode = performance_mode # Start with inherited mode
         # Set performance mode from request if provided
         if request.performance_mode:
-            performance_mode = request.performance_mode
+            logger.debug(f"Overriding performance mode to {request.performance_mode} based on request.", operation="batch_profile")
+            effective_performance_mode = request.performance_mode
         
+        logger.debug(f"Using performance mode: {effective_performance_mode}", operation="batch_profile")
         start_time = time.time()
         
         # Call the composite operation
+        logger.debug(f"Calling profile_documents for {len(request.document_paths)} paths...", operation="batch_profile")
         from tsap.composite.document_profiler import profile_documents
         
         result = await profile_documents(
@@ -595,39 +602,47 @@ async def batch_profile_documents(
         )
         
         execution_time = time.time() - start_time
+        logger.debug(f"profile_documents completed in {execution_time:.4f} seconds.", operation="batch_profile")
         
         # Add clustering if requested
         clustering = None
-        if request.cluster_documents and "profiles" in result:
-            # Placeholder for clustering implementation
-            # In a real implementation, this would cluster documents by similarity
-            clustering = {
-                "clusters": [
-                    {
-                        "id": "cluster1",
-                        "name": "Cluster 1",
-                        "documents": list(result["profiles"].keys())[:len(result["profiles"])//2],
-                        "centroid": "Document characteristics"
-                    },
-                    {
-                        "id": "cluster2",
-                        "name": "Cluster 2",
-                        "documents": list(result["profiles"].keys())[len(result["profiles"])//2:],
-                        "centroid": "Document characteristics"
-                    }
-                ],
-                "method": "placeholder",
-                "silhouette_score": 0.75
-            }
+        if request.cluster_documents:
+            logger.debug("Clustering requested.", operation="batch_profile")
+            if "profiles" in result and result["profiles"]:
+                # Placeholder for clustering implementation
+                logger.debug("Executing placeholder clustering logic.", operation="batch_profile")
+                # In a real implementation, this would cluster documents by similarity
+                clustering = {
+                    "clusters": [
+                        {
+                            "id": "cluster1",
+                            "name": "Cluster 1",
+                            "documents": list(result["profiles"].keys())[:len(result["profiles"])//2],
+                            "centroid": "Document characteristics"
+                        },
+                        {
+                            "id": "cluster2",
+                            "name": "Cluster 2",
+                            "documents": list(result["profiles"].keys())[len(result["profiles"])//2:],
+                            "centroid": "Document characteristics"
+                        }
+                    ],
+                    "method": "placeholder",
+                    "silhouette_score": 0.75 # Placeholder score
+                }
+                logger.debug("Placeholder clustering complete.", operation="batch_profile")
+            else:
+                logger.warning("Clustering requested but no profiles available to cluster.", operation="batch_profile")
         
+        logger.debug("Constructing BatchProfileResponse.", operation="batch_profile")
         return BatchProfileResponse(
             profiles=result.get("profiles", {}),
             comparisons=result.get("comparisons"),
             clustering=clustering,
             execution_time=execution_time,
-            performance_mode=performance_mode,
+            performance_mode=effective_performance_mode, # Use the mode actually used
             timestamp=datetime.now(),
-            warnings=[],
+            warnings=[], # TODO: Populate warnings if any occur during processing
             documents_processed=len(request.document_paths),
             error=None
         )

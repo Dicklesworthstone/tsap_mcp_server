@@ -57,18 +57,26 @@ def callback(
     ),
 ):
     """TSAP MCP Server command-line interface."""
-    # Set log level based on verbose flag
-    if verbose:
-        logger.set_level("debug")
-    
-    # Load configuration
-    if config_file:
-        try:
-            load_config(config_file)
-        except Exception as e:
-            logger.error(f"Failed to load config file: {e}")
-            sys.exit(1)
-    
+    # Logging is now configured by Uvicorn via dictConfig in server.py
+    # We just need to determine the level to pass to start_server
+
+    # Load configuration first
+    config = None
+    try:
+        config = load_config(config_file)
+    except FileNotFoundError:
+        config = load_config() 
+    except Exception as e:
+        # Log early errors using basic logger before full config might be active
+        print(f"ERROR: Failed to load configuration: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Determine the final log level based on config and verbose flag
+    log_level_from_config = config.server.log_level if config and config.server else "INFO"
+    final_log_level = "DEBUG" if verbose else log_level_from_config.upper()
+    # Store the final level determined by global options/config in context
+    ctx.meta["final_log_level"] = final_log_level
+
     # Set performance mode if provided
     if mode:
         try:
@@ -170,6 +178,7 @@ def shell():
 
 @server_app.command("start")
 def server_start(
+    ctx: typer.Context,
     host: str = typer.Option(
         None, "--host", "-h", help="Host to bind to"
     ),
@@ -179,21 +188,26 @@ def server_start(
     workers: int = typer.Option(
         None, "--workers", "-w", help="Number of worker processes"
     ),
-    log_level: str = typer.Option(
-        None, "--log-level", "-l", help="Logging level"
+    log_level: Optional[str] = typer.Option(
+        None, "--log-level", "-l", help="Logging level (overrides default/verbose)"
     ),
     reload: bool = typer.Option(
         False, "--reload", "-r", help="Enable auto-reload (development)"
     ),
 ):
     """Start the TSAP MCP Server."""
+    # Prioritize the command-specific --log-level option if provided
+    # Otherwise, use the level determined by the global --verbose flag / config
+    level_from_callback = ctx.meta.get("final_log_level", "INFO")
+    effective_log_level = (log_level or level_from_callback).upper()
+    
     try:
-        # Start the server
+        # Pass the effective level to start_server
         start_server(
             host=host,
             port=port,
             workers=workers,
-            log_level=log_level,
+            log_level=effective_log_level, # Pass prioritized level
             reload=reload,
         )
     except Exception as e:

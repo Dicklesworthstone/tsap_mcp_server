@@ -26,12 +26,12 @@ from .panels import (
 )
 
 # Set up standard Python logging with our custom handler
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichLoggingHandler(console=console)]
-)
+# logging.basicConfig( # Removed to centralize config in __init__.py
+#     level=logging.INFO,
+#     format="%(message)s",
+#     datefmt="[%X]",
+#     handlers=[RichLoggingHandler(console=console)]
+# )
 
 class Logger:
     """Advanced logger for TSAP with rich formatting and progress tracking."""
@@ -75,8 +75,8 @@ class Logger:
         # Output capture if enabled
         self.captured_logs = [] if capture_output else None
         
-        # Prevent propagation to avoid duplicate console logs
-        self.python_logger.propagate = False
+        # Restore propagation to allow messages to reach root handlers
+        self.python_logger.propagate = True 
         
         # Set initial log level
         self.set_level(level)
@@ -178,8 +178,8 @@ class Logger:
         formatter = self.detailed_formatter if use_detailed_formatter else self.simple_formatter
         renderable = formatter.format_record(record)
         
-        # Print to console
-        self.console.print(renderable)
+        # Print to console - REMOVED to prevent duplicates
+        # self.console.print(renderable)
         
         # Capture if enabled
         if self.captured_logs is not None:

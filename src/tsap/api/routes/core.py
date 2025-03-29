@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Path, File, UploadFile, Query, status
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Path, File, UploadFile, Query, status
 
 from tsap.utils.logging import logger
 from tsap.performance_mode import get_performance_mode, set_performance_mode
@@ -39,7 +39,7 @@ from tsap.api.models.core import (
 router = APIRouter(
     prefix="/core",
     tags=["core"],
-    dependencies=[Depends(api_key_dependency)],
+    dependencies=[api_key_dependency],
     responses={
         404: {"description": "Not found"},
         500: {"description": "Internal server error"},
@@ -123,7 +123,7 @@ async def ripgrep_search_endpoint(
     request: RipgrepSearchRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[RipgrepSearchResponse, AsyncJobResponse]:
     """
     Execute a ripgrep search operation.
@@ -213,7 +213,7 @@ async def awk_process_endpoint(
     request: AwkProcessRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[AwkProcessResponse, AsyncJobResponse]:
     """
     Execute an AWK processing operation.
@@ -303,7 +303,7 @@ async def jq_query_endpoint(
     request: JqQueryRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[JqQueryResponse, AsyncJobResponse]:
     """
     Execute a jq query operation.
@@ -393,7 +393,7 @@ async def sqlite_query_endpoint(
     request: SqliteQueryRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[SqliteQueryResponse, AsyncJobResponse]:
     """
     Execute a SQLite query operation.
@@ -483,7 +483,7 @@ async def html_process_endpoint(
     request: HtmlProcessRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[HtmlProcessResponse, AsyncJobResponse]:
     """
     Execute an HTML processing operation.
@@ -573,7 +573,7 @@ async def pdf_extract_endpoint(
     request: PdfExtractRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[PdfExtractResponse, AsyncJobResponse]:
     """
     Execute a PDF extraction operation.
@@ -663,7 +663,7 @@ async def table_process_endpoint(
     request: TableProcessRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[TableProcessResponse, AsyncJobResponse]:
     """
     Execute a table processing operation.

@@ -10,6 +10,7 @@ import hashlib
 import re
 from typing import Dict, List, Any
 from collections import Counter
+import asyncio
 
 from tsap.utils.logging import logger
 from tsap.core.pdf_extractor import extract_pdf_text
@@ -695,71 +696,98 @@ async def _analyze_html(text: str) -> Dict[str, Any]:
 
 async def create_document_profile(document_path: str, include_content: bool = True) -> DocumentProfile:
     """
-    Create a profile for a document.
-    
+    Create a comprehensive profile for a single document.
+
     Args:
-        document_path: Path to the document
-        include_content: Whether to include content features (term frequencies, etc.)
-        
+        document_path: Path to the document file.
+        include_content: Whether to include detailed content features (can be slower).
+
     Returns:
-        Document profile
+        A DocumentProfile object.
+        
+    Raises:
+        FileNotFoundError: If the document path does not exist.
+        IOError: If there's an issue reading the document.
+        Exception: For other underlying analysis errors.
     """
-    # Create profile object
+    logger.info(f"Starting profile creation for: {document_path}", component="composite", operation="create_profile")
+    
+    if not os.path.exists(document_path):
+        logger.error(f"Document not found: {document_path}", component="composite", operation="create_profile")
+        raise FileNotFoundError(f"Document not found: {document_path}")
+
     profile = DocumentProfile(document_path)
     
     try:
-        # Extract text
+        # 1. Extract Text
+        logger.debug(f"Extracting text from: {document_path}", component="composite", operation="extract_text")
         text = await _extract_document_text(document_path)
+        logger.debug(f"Text extracted successfully ({len(text)} chars).", component="composite", operation="extract_text")
         
-        # Compute basic properties
+        # 2. Basic Properties
+        logger.debug("Computing basic properties...", component="composite", operation="compute_basic_props")
         basic_props = await _compute_basic_properties(document_path)
         profile.file_size = basic_props["file_size"]
         profile.creation_time = basic_props["creation_time"]
         profile.modification_time = basic_props["modification_time"]
         profile.hash = basic_props["hash"]
-        
-        # Compute content metrics
+        logger.debug("Basic properties computed.", component="composite", operation="compute_basic_props")
+
+        # 3. Content Metrics
+        logger.debug("Computing content metrics...", component="composite", operation="compute_content_metrics")
         content_metrics = await _compute_content_metrics(text)
         profile.line_count = content_metrics["line_count"]
         profile.word_count = content_metrics["word_count"]
         profile.char_count = content_metrics["char_count"]
-        
-        # Detect language
-        language_info = await _detect_language(text)
-        profile.language = language_info["language"]
-        profile.language_confidence = language_info["language_confidence"]
-        
-        # Analyze structure
-        structure_info = await _analyze_structure(text)
-        profile.section_count = structure_info["metrics"]["section_count"]
-        profile.paragraph_count = structure_info["metrics"]["paragraph_count"]
-        profile.heading_count = structure_info["metrics"]["heading_count"]
-        profile.list_count = structure_info["metrics"]["list_count"]
-        profile.table_count = structure_info["metrics"]["table_count"]
-        
-        profile.section_structure = structure_info["features"]["section_structure"]
-        profile.heading_hierarchy = structure_info["features"]["heading_hierarchy"]
-        profile.named_entities = structure_info["features"]["named_entities"]
-        
-        # Add content type-specific features
-        profile.content_type_features = await _analyze_content_type(document_path, text)
-        
-        # Add content features if requested
+        logger.debug("Content metrics computed.", component="composite", operation="compute_content_metrics")
+
+        # 4. Language Detection
+        logger.debug("Detecting language...", component="composite", operation="detect_language")
+        lang_features = await _detect_language(text)
+        profile.language = lang_features["language"]
+        profile.language_confidence = lang_features["language_confidence"]
+        logger.debug(f"Language detected: {profile.language} (Confidence: {profile.language_confidence:.2f})", component="composite", operation="detect_language")
+
+        # 5. Content Features (Optional)
         if include_content:
+            logger.debug("Computing content features...", component="composite", operation="compute_content_features")
             content_features = await _compute_content_features(text)
             profile.top_terms = content_features["top_terms"]
             profile.ngrams = content_features["ngrams"]
             profile.term_frequencies = content_features["term_frequencies"]
             profile.readability_score = content_features["readability_score"]
-    
+            logger.debug("Content features computed.", component="composite", operation="compute_content_features")
+
+        # 6. Structure Analysis
+        logger.debug("Analyzing structure...", component="composite", operation="analyze_structure")
+        structure_features = await _analyze_structure(text)
+        profile.section_count = structure_features["metrics"]["section_count"]
+        profile.paragraph_count = structure_features["metrics"]["paragraph_count"]
+        profile.heading_count = structure_features["metrics"]["heading_count"]
+        profile.list_count = structure_features["metrics"]["list_count"]
+        profile.table_count = structure_features["metrics"]["table_count"]
+        profile.section_structure = structure_features["features"]["section_structure"]
+        profile.heading_hierarchy = structure_features["features"]["heading_hierarchy"]
+        profile.named_entities = structure_features["features"]["named_entities"] # Assuming NER is part of structure
+        logger.debug("Structure analysis completed.", component="composite", operation="analyze_structure")
+
+        # 7. Content-Type Specific Analysis
+        logger.debug("Analyzing content type specific features...", component="composite", operation="analyze_content_type")
+        profile.content_type_features = await _analyze_content_type(document_path, text)
+        logger.debug("Content type analysis completed.", component="composite", operation="analyze_content_type")
+
+        logger.info(f"Finished profile creation for: {document_path}", component="composite", operation="create_profile")
+        return profile
+
     except Exception as e:
         logger.error(
-            f"Error creating profile for {document_path}: {str(e)}",
-            component="composite",
-            operation="document_profiler"
+            f"Error creating profile for {document_path}: {str(e)}", 
+            component="composite", 
+            operation="create_profile",
+            exc_info=True # Include traceback in log
         )
-    
-    return profile
+        # Re-raise the exception so the caller knows something went wrong
+        raise e
 
 
 async def profile_document(params: DocumentProfilerParams) -> DocumentProfilerResult:
@@ -811,41 +839,64 @@ async def profile_documents(
     compare_documents: bool = True
 ) -> Dict[str, Any]:
     """
-    Profile multiple documents and optionally compare them.
-    
+    Create profiles for multiple documents and optionally compare them.
+
     Args:
-        document_paths: List of document paths
-        include_content_features: Whether to include content features
-        compare_documents: Whether to compare documents
-        
+        document_paths: List of paths to the documents.
+        include_content_features: Whether to compute detailed content features.
+        compare_documents: Whether to calculate similarity between all pairs of documents.
+
     Returns:
-        Dictionary with profiles and comparisons
+        A dictionary containing:
+            - profiles: A dictionary mapping document paths to their profile data.
+            - comparisons: A dictionary mapping document pairs (path1 <-> path2) 
+                           to their similarity score, if compare_documents is True.
     """
-    # Create profiles for all documents
-    profiles = {}
+    logger.info(f"Starting batch document profiling for {len(document_paths)} documents.", component="composite", operation="batch_profile")
     
+    profiles: Dict[str, DocumentProfile] = {}
+    errors: Dict[str, str] = {}
+
+    # Create profiles concurrently
+    tasks = []
     for path in document_paths:
-        profile = await create_document_profile(path, include_content_features)
-        profiles[path] = profile
+        tasks.append(create_document_profile(path, include_content_features))
+        
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    # Compare documents if requested
-    comparisons = {}
+    for path, result in zip(document_paths, results):
+        if isinstance(result, DocumentProfile):
+            profiles[path] = result
+        elif isinstance(result, Exception):
+            errors[path] = str(result)
+            logger.warning(f"Failed to profile {path}: {str(result)}", component="composite", operation="batch_profile")
+
+    # Optionally compare profiles
+    comparisons: Dict[str, Dict[str, float]] = {}
     if compare_documents and len(profiles) > 1:
-        # Compare each pair of documents
-        for i, (path1, profile1) in enumerate(profiles.items()):
-            for path2, profile2 in list(profiles.items())[i+1:]:
-                # Calculate similarity
-                similarity = profile1.similarity_to(profile2)
-                
-                # Add to comparisons
-                pair_key = f"{path1} <-> {path2}"
-                comparisons[pair_key] = {
-                    "similarity": similarity,
-                    "similar_features": []  # Would identify specific similar features in a real implementation
-                }
+        logger.info("Starting document comparison phase.", component="composite", operation="batch_profile_compare")
+        profile_items = list(profiles.items())
+        for i in range(len(profile_items)):
+            for j in range(i + 1, len(profile_items)):
+                path1, profile1 = profile_items[i]
+                path2, profile2 = profile_items[j]
+                try:
+                    similarity = profile1.similarity_to(profile2)
+                    pair_key = f"{path1} <-> {path2}"
+                    comparisons[pair_key] = {"similarity": similarity}
+                    logger.debug(f"Compared {os.path.basename(path1)} <-> {os.path.basename(path2)}: Similarity {similarity:.3f}", component="composite", operation="batch_profile_compare")
+                except Exception as e:
+                     logger.error(f"Error comparing {path1} and {path2}: {str(e)}", component="composite", operation="batch_profile_compare", exc_info=True)
+        logger.info(f"Completed document comparison. Found {len(comparisons)} comparison pairs.", component="composite", operation="batch_profile_compare")
+
+    # Prepare results
+    profile_dicts = {path: profile.to_dict() for path, profile in profiles.items()}
     
-    # Create result
-    return {
-        "profiles": {path: profile.to_dict() for path, profile in profiles.items()},
-        "comparisons": comparisons if compare_documents else None
+    final_result = {
+        "profiles": profile_dicts,
+        "comparisons": comparisons,
+        "errors": errors # Include errors in the result
     }
+
+    logger.info(f"Finished batch document profiling. Generated {len(profiles)} profiles.", component="composite", operation="batch_profile")
+    return final_result

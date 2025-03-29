@@ -27,7 +27,7 @@ class RipgrepSearchRequest(BaseModel):
     performance_mode: Optional[str] = Field(default=None, description="Performance mode for this specific request")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "pattern": "function",
@@ -52,7 +52,7 @@ class AwkProcessRequest(BaseModel):
     performance_mode: Optional[str] = Field(default=None, description="Performance mode for this specific request")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "script": "{ print $1, $3 }",
@@ -73,7 +73,7 @@ class JqQueryRequest(BaseModel):
     performance_mode: Optional[str] = Field(default=None, description="Performance mode for this specific request")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "query": ".items[] | select(.active == true)",
@@ -95,7 +95,7 @@ class SqliteQueryRequest(BaseModel):
     performance_mode: Optional[str] = Field(default=None, description="Performance mode for this specific request")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "database": "database.db",
@@ -116,7 +116,7 @@ class HtmlProcessRequest(BaseModel):
     performance_mode: Optional[str] = Field(default=None, description="Performance mode for this specific request")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "html_source": "file",
@@ -140,7 +140,7 @@ class PdfExtractRequest(BaseModel):
     performance_mode: Optional[str] = Field(default=None, description="Performance mode for this specific request")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "file_path": "document.pdf",
@@ -164,7 +164,7 @@ class TableProcessRequest(BaseModel):
     performance_mode: Optional[str] = Field(default=None, description="Performance mode for this specific request")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "params": {
                     "file_path": "data.csv",

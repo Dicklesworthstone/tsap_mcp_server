@@ -43,7 +43,7 @@ async def run_batch_profiling(client: TSAPClient, paths: List[str]):
     rich_print(Syntax(json.dumps(request_payload, indent=2), "json", theme="default"))
 
     # --- Make API Call ---
-    response = await client.post("/api/composite/batch_profile", payload=request_payload)
+    response = await client.post("api/composite/batch_profile", payload=request_payload)
 
     # --- Process Response ---
     if not response or "error" in response:

@@ -55,9 +55,36 @@ def print_section(title: str):
     console.print(Rule(f"[bold cyan]{title}[/bold cyan]"))
     console.print()
 
-def load_documents(data_dir: str, max_docs: int) -> List[Dict[str, Any]]:
-    """Load text documents from the specified directory."""
-    documents = []
+def chunk_text(text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> List[str]:
+    """Basic text chunking by paragraphs, ensuring chunks aren't too small."""
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    chunks = []
+    current_chunk = ""
+    min_chunk_length = 100 # Avoid tiny chunks
+
+    for paragraph in paragraphs:
+        if not current_chunk:
+            current_chunk = paragraph
+        # If adding the next paragraph fits within chunk_size or the current chunk is too small
+        elif len(current_chunk) < min_chunk_length or len(current_chunk) + len(paragraph) + 1 <= chunk_size:
+            current_chunk += "\n\n" + paragraph
+        else:
+            # Chunk is full enough, add it
+            chunks.append(current_chunk)
+            # Start new chunk, potentially with overlap (last part of previous paragraph)
+            # Simple overlap: just start with the new paragraph
+            current_chunk = paragraph
+
+    # Add the last remaining chunk if it's not empty
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    # Filter out any potentially remaining very small chunks after processing
+    return [chunk for chunk in chunks if len(chunk) >= min_chunk_length // 2]
+
+def load_and_chunk_documents(data_dir: str, max_docs: int) -> List[Dict[str, Any]]:
+    """Load text documents from the specified directory and chunk them."""
+    chunked_documents = []
     filepaths = glob.glob(os.path.join(data_dir, "*.md")) + \
                 glob.glob(os.path.join(data_dir, "*.txt"))
                 
@@ -66,27 +93,38 @@ def load_documents(data_dir: str, max_docs: int) -> List[Dict[str, Any]]:
         console.print("[yellow]Please ensure the 'tsap_example_data' directory exists and contains documents.[/yellow]")
         sys.exit(1)
         
-    console.print(f"Loading documents from '{data_dir}'...")
+    console.print(f"Loading and chunking documents from '{data_dir}'...")
+    doc_count = 0
+    chunk_count = 0
     for i, filepath in enumerate(filepaths):
-        if i >= max_docs:
+        if doc_count >= max_docs:
             console.print(f"[dim]Reached max documents ({max_docs}), stopping loading.[/dim]")
             break
+        doc_count += 1
+        base_filename = os.path.basename(filepath)
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
-                documents.append({
-                    "id": f"doc_{os.path.basename(filepath)}_{i}",
-                    "text": content,
-                    "metadata": {
-                        "source_file": os.path.basename(filepath),
-                        "path": filepath
+                chunks = chunk_text(content) # Use the new chunking function
+                for chunk_idx, chunk_text_content in enumerate(chunks):
+                    chunk_id = f"doc_{base_filename}_{i}_chunk_{chunk_idx}"
+                    metadata = {
+                        "source_file": base_filename,
+                        "path": filepath,
+                        "chunk_index": chunk_idx,
+                        "total_chunks": len(chunks)
                     }
-                })
+                    chunked_documents.append({
+                        "id": chunk_id,
+                        "text": chunk_text_content,
+                        "metadata": metadata
+                    })
+                    chunk_count += 1
         except Exception as e:
-            console.print(f"[yellow]Warning:[/yellow] Could not read file '{filepath}': {e}")
+            console.print(f"[yellow]Warning:[/yellow] Could not read or chunk file '{filepath}': {e}")
             
-    console.print(f"Loaded {len(documents)} documents.")
-    return documents
+    console.print(f"Loaded {doc_count} documents, created {chunk_count} chunks.")
+    return chunked_documents
 
 def display_results(results_data: Dict[str, Any]):
     """Display semantic search results using rich Table."""
@@ -117,11 +155,12 @@ def display_results(results_data: Dict[str, Any]):
         text_snippet = result.get('text', '')[:150].strip().replace('\n', ' ') + "..."
         metadata = result.get('metadata', {})
         source_file = metadata.get('source_file', 'N/A')
+        chunk_info = f" (Chunk {metadata.get('chunk_index', '?')}/{metadata.get('total_chunks', '?')})" if 'chunk_index' in metadata else ""
         
         table.add_row(
             str(i + 1),
             score,
-            source_file,
+            f"{source_file}{chunk_info}", # Display chunk info alongside filename
             text_snippet
         )
 
@@ -139,11 +178,11 @@ async def run_semantic_search_demo(query: str, data_dir: str):
         subtitle=f"Querying data from '{data_dir}'"
     ))
 
-    # Load documents
-    print_section("Loading Data")
-    documents = load_documents(data_dir, MAX_DOCS_TO_INDEX)
+    # Load and chunk documents
+    print_section("Loading & Chunking Data")
+    documents = load_and_chunk_documents(data_dir, MAX_DOCS_TO_INDEX)
     if not documents:
-        console.print("[bold red]Failed to load documents. Exiting.[/bold red]")
+        console.print("[bold red]Failed to load or chunk documents. Exiting.[/bold red]")
         return
 
     texts_to_index = [doc["text"] for doc in documents]
@@ -231,8 +270,8 @@ async def main():
     parser.add_argument(
         "--data-dir",
         type=str,
-        default=EXAMPLE_DATA_DIR,
-        help=f"Directory containing documents to search. Default: '{EXAMPLE_DATA_DIR}'"
+        default=os.path.join(PROJECT_ROOT, EXAMPLE_DATA_DIR),
+        help=f"Directory containing documents to search. Default: '{EXAMPLE_DATA_DIR}' relative to project root"
     )
     parser.add_argument(
         "--max-docs",

@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, Union
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Path, status
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Path, status
 
 from tsap.utils.logging import logger
 from tsap.performance_mode import get_performance_mode, set_performance_mode
@@ -38,7 +38,7 @@ from tsap.api.models.evolution import (
 router = APIRouter(
     prefix="/evolution",
     tags=["evolution"],
-    dependencies=[Depends(api_key_dependency)],
+    dependencies=[api_key_dependency],
     responses={
         404: {"description": "Not found"},
         500: {"description": "Internal server error"},
@@ -162,7 +162,7 @@ async def evolve_pattern(
     request: PatternEvolutionRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[PatternEvolutionResponse, AsyncJobResponse]:
     """
     Evolve a regex pattern based on positive and negative examples.
@@ -269,7 +269,7 @@ async def evolve_strategy(
     request: StrategyEvolutionRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[StrategyEvolutionResponse, AsyncJobResponse]:
     """
     Evolve a search or analysis strategy based on training examples.
@@ -403,7 +403,7 @@ async def runtime_learning(
     request: RuntimeLearningRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[RuntimeLearningResponse, AsyncJobResponse]:
     """
     Apply runtime learning to optimize patterns or strategies based on feedback.
@@ -432,7 +432,7 @@ async def offline_learning(
     request: OfflineLearningRequest,
     background_tasks: BackgroundTasks,
     api_key: str = api_key_dependency,
-    performance_mode: str = Depends(performance_mode_dependency)
+    performance_mode: str = performance_mode_dependency
 ) -> Union[OfflineLearningResponse, AsyncJobResponse]:
     """
     Perform offline learning from historical data to improve patterns or strategies.

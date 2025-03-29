@@ -4,7 +4,6 @@ import logging
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any, Optional
 import traceback
-import importlib.util
 import inspect
 
 # Configure logging
@@ -28,7 +27,7 @@ try:
 except ImportError:
     # If faiss import fails completely, try to load the CPU version
     try:
-        import faiss_cpu as faiss
+        import faiss_cpu as faiss # type: ignore
         gpu_available = False
         logger.info("Loaded faiss-cpu as fallback")
     except ImportError:
@@ -60,7 +59,7 @@ def is_gpu_available():
     # Then do a deeper check to make sure GPU resources can actually be created
     try:
         # Try to create GPU resources
-        res = faiss.StandardGpuResources()
+        res = faiss.StandardGpuResources()  # noqa: F841
         logger.info("Successfully created StandardGpuResources")
         
         # Check if we can get GPU count

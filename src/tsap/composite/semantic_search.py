@@ -12,7 +12,7 @@ class SemanticSearchParams(BaseModel):
     ids: Optional[List[str]] = Field(None, description="Optional document IDs")
     metadata: Optional[List[Dict[str, Any]]] = Field(None, description="Optional metadata for documents")
     top_k: int = Field(10, description="Number of top results to return")
-    embedding_model: str = Field("nomic-embed-text-v2.0", description="Embedding model to use")
+    embedding_model: str = Field("nomic-ai/nomic-embed-text-v2-moe", description="Embedding model to use")
     use_gpu: bool = Field(True, description="Whether to use GPU if available")
     normalize_vectors: bool = Field(True, description="Whether to normalize vectors")
     

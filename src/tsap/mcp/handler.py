@@ -648,9 +648,12 @@ async def handle_semantic_search(args: Dict[str, Any]) -> Dict[str, Any]:
     query = args["query"]
     ids = args.get("ids", [f"doc_{i}" for i in range(len(texts))])
     top_k = args.get("top_k", 10)
+    # Extract metadata from args, providing a default if missing
+    metadata = args.get("metadata", [{} for _ in range(len(texts))])
 
     op = get_operation("semantic_search")
-    params = SemanticSearchParams(texts=texts, query=query, ids=ids, top_k=top_k)
+    # Pass metadata when creating params
+    params = SemanticSearchParams(texts=texts, query=query, ids=ids, top_k=top_k, metadata=metadata)
     result = await op.execute_with_stats(params)
 
     backend = "gpu" if hasattr(faiss, "StandardGpuResources") and faiss.get_num_gpus() > 0 else "cpu"

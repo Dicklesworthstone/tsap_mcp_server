@@ -6,19 +6,19 @@ requests and dispatches them to the appropriate handlers.
 """
 import signal
 import asyncio
-from typing import Optional
+from typing import Optional, Any
 from contextlib import asynccontextmanager
-import traceback
 
 import uvicorn
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from tsap.utils.logging import logger
 from tsap.config import get_config
 from tsap.version import __version__, get_version_info
 from tsap.performance_mode import get_performance_mode
-from tsap.mcp.protocol import MCPRequest, MCPResponse, MCPError
+from tsap.mcp.protocol import MCPRequest
 from tsap.mcp.handler import handle_request, initialize_handlers
 
 
@@ -27,6 +27,69 @@ _server_app = None
 
 # Shutdown event
 _shutdown_event = asyncio.Event()
+
+
+# Updated Helper function for aggressive, recursive truncation
+def truncate_repr(obj: Any, max_len: int = 50) -> str:
+    """Return a representation of the object, aggressively truncating all long strings."""
+    try:
+        if isinstance(obj, dict):
+            # Recursively process dictionary values
+            items_repr = []
+            for k, v in obj.items():
+                k_repr = repr(k) # Keys are usually short, keep as is
+                v_repr = truncate_repr(v, max_len) # Recurse on value
+                items_repr.append(f"{k_repr}: {v_repr}")
+            return "{" + ", ".join(items_repr) + "}"
+
+        elif isinstance(obj, list):
+            # Recursively process list items, showing only first few
+            num_items = len(obj)
+            if num_items == 0:
+                return "[]"
+
+            truncated_list = []
+            for i, item in enumerate(obj):
+                if i < 3:
+                    item_repr = truncate_repr(item, max_len) # Recurse on item
+                    truncated_list.append(item_repr)
+                elif i == 3:
+                    truncated_list.append("...")
+                    break # Stop after showing ellipsis
+            return f"[{', '.join(truncated_list)}] ({num_items} items total)"
+
+        elif isinstance(obj, str):
+            # Truncate string if it exceeds max_len
+            if len(obj) > max_len:
+                return f"'{obj[:max_len]}... (truncated {len(obj) - max_len} chars)'"
+            else:
+                return repr(obj) # Use repr to keep quotes for strings
+
+        elif isinstance(obj, bytes):
+             # Truncate bytes
+             if len(obj) > max_len:
+                 return f"{repr(obj[:max_len])[:-1]}... (truncated {len(obj) - max_len} bytes)'"
+             else:
+                 return repr(obj)
+
+        else:
+            # For other types, use standard repr but truncate if too long
+            obj_repr = repr(obj)
+            if len(obj_repr) > max_len:
+                 # Try to get a shorter representation for objects
+                 if hasattr(obj, '__class__'):
+                     short_repr = f"<{obj.__class__.__name__} object>"
+                     if len(short_repr) <= max_len: 
+                         return short_repr
+                 return f"{obj_repr[:max_len]}... (truncated)"
+            return obj_repr
+
+    except Exception as e:
+        # Ultimate fallback for problematic objects during recursion/repr
+        try:
+            return f"<Object of type {type(obj).__name__} - Error during repr: {str(e)[:max_len]}>"
+        except Exception:
+             return "<Unrepresentable object - Error during repr>"
 
 
 @asynccontextmanager
@@ -185,12 +248,13 @@ def _create_mcp_router() -> APIRouter:
         Returns:
             MCP response
         """
-        # Print request details for debugging
-        print(f"REQUEST RECEIVED: {request}")
+        # Use the truncate_repr helper for logging request details
+        print(f"REQUEST RECEIVED: {truncate_repr(request)}")
         print(f"  Command: {request.command}")
         print(f"  Request ID: {request.request_id}")
-        print(f"  Args: {request.args}")
-        
+        # Truncate args separately if needed for more clarity
+        print(f"  Args: {truncate_repr(request.args)}")
+
         logger.info(
             f"Received MCP request: {request.command}",
             component="mcp",
@@ -202,12 +266,14 @@ def _create_mcp_router() -> APIRouter:
             # Use the handle_request function from mcp/handler.py
             print("About to call handle_request...")
             response = await handle_request(request)
-            print(f"RESPONSE: {response}")
+            # Use the truncate_repr helper for logging response details
+            print(f"RESPONSE: {truncate_repr(response)}")
             print(f"  Status: {response.status}")
             if response.data:
-                print(f"  Data: {response.data}")
+                 # Truncate data separately if needed
+                print(f"  Data: {truncate_repr(response.data)}")
             if response.error:
-                print(f"  Error: {response.error}")
+                print(f"  Error: {truncate_repr(response.error)}")
             
             logger.success(
                 f"Completed MCP request: {request.command}",
@@ -219,29 +285,78 @@ def _create_mcp_router() -> APIRouter:
             return response
             
         except Exception as e:
-            # Print a detailed error for debugging
-            logger.error(
-                f"Error processing MCP request: {str(e)}",
-                component="mcp",
-                operation="error",
-                exception=e,
-                context={
-                    "request_id": request.request_id,
-                    "traceback": traceback.format_exc()
-                }
+            logger.error(f"Error processing request: {e}")
+            # Use truncate_repr for logging error response details too
+            error_content = {"error": "Failed to process request", "details": str(e)}
+            response = JSONResponse(
+                content=error_content,
+                status_code=400,
             )
-            
-            return MCPResponse(
-                request_id=request.request_id,
-                status="error",
-                command=request.command,
-                error=MCPError(
-                    code="internal_error",
-                    message=str(e),
-                    details=str(e.__class__.__name__),
-                )
-            )
-    
+            print(f"ERROR RESPONSE: {truncate_repr(error_content)}") # Log truncated error
+            return response
+
+        # # The following section seems redundant with the initial logging and truncation logic above.
+        # # Commenting it out to avoid double logging/processing. If needed, integrate its logic
+        # # more cleanly into the initial print statements.
+
+        # # Log received request (truncate 'texts' if present)
+        # log_request_repr = repr(request)
+        # try:
+        #     # Check if args exist and contain 'texts'
+        #     if hasattr(request, 'args') and isinstance(request.args, dict) and 'texts' in request.args:
+        #         # Create a copy to modify for logging
+        #         log_args = request.args.copy()
+        #         texts_value = log_args['texts']
+        #         truncated_texts_repr = "[...some texts...]"
+        #         num_items = 0
+
+        #         if isinstance(texts_value, list):
+        #             num_items = len(texts_value)
+        #             truncated_list = []
+        #             # Truncate each text item if it's a long string
+        #             for i, text_item in enumerate(texts_value):
+        #                 if i < 3: # Show first few items truncated
+        #                     if isinstance(text_item, str) and len(text_item) > 100:
+        #                         truncated_list.append(f"'{text_item[:100]}... (truncated)'")
+        #                     else:
+        #                         # Keep short strings or non-string items as is (using repr)
+        #                         truncated_list.append(repr(text_item))
+        #                 elif i == 3:
+        #                     truncated_list.append("...") # Indicate more items were truncated
+        #                     break # Stop after showing ellipsis
+        #             truncated_texts_repr = f"[{', '.join(truncated_list)}] ({num_items} items total)"
+        #         elif isinstance(texts_value, str) and len(texts_value) > 200:
+        #             num_items = 1
+        #             truncated_texts_repr = f"'{texts_value[:200]}... (truncated {len(texts_value) - 200} chars)'"
+        #         else:
+        #              # Handle other types or short strings by just showing the type/count
+        #             num_items = 1 if not isinstance(texts_value, list) else len(texts_value)
+        #             truncated_texts_repr = f"<{type(texts_value).__name__} object ({num_items} item(s))>"
+
+        #         log_args['texts'] = truncated_texts_repr # Replace in the copied dict
+
+        #         # Reconstruct a limited repr for logging, showing command, ID, and modified args
+        #         log_request_repr = f"MCPRequest(request_id='{request.request_id}', command='{request.command}', args={log_args})"
+        # except Exception as log_exc: # Catch potential errors during log formatting
+        #     logger.warning(f"Failed to format request args for logging: {log_exc}")
+        #     # Fallback to default repr if formatting fails
+        #     log_request_repr = repr(request)
+
+        # print(f"REQUEST RECEIVED: {log_request_repr}") # This seems redundant
+
+        # # Process request (This was already done above before the response logging)
+        # mcp_response = await handle_request(request) # This line is duplicated
+
+        # logger.success( # This logger call is also duplicated from the try block
+        #     f"Completed MCP request: {request.command}",
+        #     component="mcp",
+        #     operation="response",
+        #     context={"request_id": request.request_id}
+        # )
+
+        # return mcp_response # This return is duplicated
+
+
     return router
 
 

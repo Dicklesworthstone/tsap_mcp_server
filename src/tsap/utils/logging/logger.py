@@ -75,6 +75,9 @@ class Logger:
         # Output capture if enabled
         self.captured_logs = [] if capture_output else None
         
+        # Prevent propagation to avoid duplicate console logs
+        self.python_logger.propagate = False
+        
         # Set initial log level
         self.set_level(level)
     
@@ -979,8 +982,12 @@ class Logger:
         if context:
             startup_context.update(context)
             
-        # Log startup message
-        self.section("TSAP Startup", f"Version {version} ({mode} mode)", component)
+        # Create the header panel
+        # panel = HeaderPanel(title="TSAP Startup", version=version, mode=mode)
+        # self.console.print(panel)
+        
+        # Log the startup message
+        self.section("TSAP Startup", component=component)
         
         # Log detailed message
         self._log(

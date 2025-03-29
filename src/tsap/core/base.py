@@ -240,14 +240,27 @@ class CompositeOperation(Generic[I, O], ABC):
             # Increment error count
             self.statistics["errors"] += 1
             
-            # Wrap in CompositeError if needed
+            # Wrap in CompositeError if needed, preserving more info
             if not isinstance(e, CompositeError):
+                error_message = f"Error during {self.name}: {type(e).__name__} - {str(e)}"
+                error_details = {
+                    "original_error_type": type(e).__name__,
+                    "original_error_message": str(e),
+                }
+                logger.error(
+                    f"Wrapping exception in CompositeError: {error_message}", 
+                    operation=self.name, 
+                    exception=e
+                )
                 raise CompositeError(
-                    str(e),
+                    error_message,
                     operation=self.name,
-                    details={"original_error": str(e)},
+                    details=error_details,
                 ) from e
             
+            # Re-raise if it was already a CompositeError
+            # Log it first for visibility
+            logger.error(f"Re-raising CompositeError: {e}", operation=self.name, exception=e)
             raise
             
         finally:

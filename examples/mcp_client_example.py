@@ -163,6 +163,41 @@ class MCPClient:
         # Send the request
         return await self.send_request("ripgrep_search", args)
 
+    async def semantic_search(
+        self,
+        texts: List[str],
+        query: str,
+        ids: Optional[List[str]] = None,
+        metadata: Optional[List[Dict[str, Any]]] = None,
+        top_k: int = 10,
+        mode: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Perform a semantic search.
+
+        Args:
+            texts: List of texts to index and search.
+            query: The search query.
+            ids: Optional list of unique IDs for each text. If None, generated.
+            metadata: Optional list of metadata dictionaries corresponding to texts.
+            top_k: Number of top results to return.
+            mode: Optional performance mode.
+
+        Returns:
+            Semantic search results.
+        """
+        args = {
+            "texts": texts,
+            "query": query,
+            "top_k": top_k,
+        }
+        if ids:
+            args["ids"] = ids
+        if metadata:
+            args["metadata"] = metadata
+            
+        # Send the request using the specified mode
+        return await self.send_request("semantic_search", args, mode=mode)
+
 
 async def main():
     """Run example MCP client requests."""

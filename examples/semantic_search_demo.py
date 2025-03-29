@@ -1,319 +1,259 @@
-#!/usr/bin/env python
-"""
-Semantic Search Demo Script
-
-This script demonstrates the semantic search capabilities of TSAP.
-It performs text embedding and similarity search using the FAISS backend.
-"""
-
+#!/usr/bin/env python3
 import sys
 import os
 import time
 import argparse
-from pprint import pprint
 import asyncio
 import json
+import glob
+from typing import List, Dict, Any
+# Use absolute import relative to project root in sys.path
+from mcp_client_example import MCPClient
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.syntax import Syntax
+from rich.rule import Rule
 
-# Add the src directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Initialize console after rich imports
+console = Console()
 
-from src.tsap.core.semantic_search_tool import get_tool as get_semantic_tool
-from src.tsap.composite.semantic_search import SemanticSearchParams, SemanticSearchOperation
+"""
+Semantic Search Demo Script (MCP Client Version)
 
-# Sample text dataset (Shakespeare quotes)
-SAMPLE_TEXTS = [
-    "To be, or not to be, that is the question: Whether 'tis nobler in the mind to suffer "
-    "The slings and arrows of outrageous fortune, Or to take arms against a sea of troubles "
-    "And by opposing end them.",
-    
-    "All the world's a stage, and all the men and women merely players. "
-    "They have their exits and their entrances; And one man in his time plays many parts.",
-    
-    "The quality of mercy is not strained. It droppeth as the gentle rain from heaven "
-    "Upon the place beneath. It is twice blest: It blesseth him that gives and him that takes.",
-    
-    "Friends, Romans, countrymen, lend me your ears; I come to bury Caesar, not to praise him. "
-    "The evil that men do lives after them; The good is oft interred with their bones.",
-    
-    "Tomorrow, and tomorrow, and tomorrow, Creeps in this petty pace from day to day, "
-    "To the last syllable of recorded time; And all our yesterdays have lighted fools "
-    "The way to dusty death.",
-    
-    "What's in a name? That which we call a rose By any other name would smell as sweet.",
-    
-    "If music be the food of love, play on, Give me excess of it; that surfeiting, "
-    "The appetite may sicken, and so die.",
-    
-    "The fool doth think he is wise, but the wise man knows himself to be a fool.",
-    
-    "Life's but a walking shadow, a poor player, That struts and frets his hour upon the stage, "
-    "And then is heard no more. It is a tale Told by an idiot, full of sound and fury, Signifying nothing.",
-    
-    "Some are born great, some achieve greatness, and some have greatness thrust upon them."
-]
+This script demonstrates the semantic search capabilities of TSAP
+by interacting with the MCP server via the MCPClient.
+"""
 
-# Sample metadata
-SAMPLE_METADATA = [
-    {"play": "Hamlet", "character": "Hamlet", "act": 3, "scene": 1},
-    {"play": "As You Like It", "character": "Jaques", "act": 2, "scene": 7},
-    {"play": "The Merchant of Venice", "character": "Portia", "act": 4, "scene": 1},
-    {"play": "Julius Caesar", "character": "Mark Antony", "act": 3, "scene": 2},
-    {"play": "Macbeth", "character": "Macbeth", "act": 5, "scene": 5},
-    {"play": "Romeo and Juliet", "character": "Juliet", "act": 2, "scene": 2},
-    {"play": "Twelfth Night", "character": "Duke Orsino", "act": 1, "scene": 1},
-    {"play": "As You Like It", "character": "Touchstone", "act": 5, "scene": 1},
-    {"play": "Macbeth", "character": "Macbeth", "act": 5, "scene": 5},
-    {"play": "Twelfth Night", "character": "Malvolio", "act": 2, "scene": 5}
-]
+# --- Configuration ---
+EXAMPLE_DATA_DIR = "tsap_example_data/documents/"
+DEFAULT_QUERY = "What is the nature of strategy?"
+MAX_DOCS_TO_INDEX = 50  # Limit number of docs for demo speed
+MAX_RESULTS_TO_SHOW = 5
 
-# Sample queries
-SAMPLE_QUERIES = [
-    "What is the meaning of life?",
-    "How can I be wise?",
-    "Tell me about love",
-    "What is greatness?",
-    "Should I take action against problems?"
-]
+# --- Robust Path Setup ---
+def find_project_root(marker_dirs=["src", "examples"]):
+    """Find the project root directory containing marker directories."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        if all(os.path.exists(os.path.join(current_dir, marker)) for marker in marker_dirs):
+            return current_dir
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir == current_dir: # Reached filesystem root
+            raise RuntimeError("Could not find project root containing: " + ", ".join(marker_dirs))
+        current_dir = parent_dir
 
+PROJECT_ROOT = find_project_root()
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+# --- End Path Setup ---
+
+# --- Helper Functions ---
 
 def print_section(title: str):
-    """Print a section title."""
-    print("\n" + "=" * 80)
-    print(f"  {title}")
-    print("=" * 80)
+    """Print a section title using rich Rule."""
+    console.print(Rule(f"[bold cyan]{title}[/bold cyan]"))
+    console.print()
 
-
-async def direct_tool_demo(use_gpu: bool = True):
-    """Demo using the semantic search tool directly."""
-    print_section("Direct Tool Usage Demo")
-    
-    # Get the semantic search tool
-    tool = get_semantic_tool("semantic_search")
-    tool.use_gpu = use_gpu
-    
-    # Index the documents
-    print("Indexing sample texts...")
-    start_time = time.time()
-    
-    # Generate IDs for the texts
-    ids = [f"quote_{i+1}" for i in range(len(SAMPLE_TEXTS))]
-    
-    # Index the texts with metadata
-    tool.index_texts(SAMPLE_TEXTS, ids, SAMPLE_METADATA)
-    
-    print(f"Indexing completed in {time.time() - start_time:.2f} seconds")
-    
-    # Print backend info
-    backend_info = tool.get_backend_info()
-    print("\nBackend Information:")
-    pprint(backend_info)
-    
-    # Run searches for each query
-    print("\nPerforming searches:")
-    for i, query in enumerate(SAMPLE_QUERIES):
-        print(f"\nQuery {i+1}: '{query}'")
+def load_documents(data_dir: str, max_docs: int) -> List[Dict[str, Any]]:
+    """Load text documents from the specified directory."""
+    documents = []
+    filepaths = glob.glob(os.path.join(data_dir, "*.md")) + \
+                glob.glob(os.path.join(data_dir, "*.txt"))
+                
+    if not filepaths:
+        console.print(f"[bold red]Error:[/bold red] No .md or .txt files found in '{data_dir}'.")
+        console.print("[yellow]Please ensure the 'tsap_example_data' directory exists and contains documents.[/yellow]")
+        sys.exit(1)
         
-        start_time = time.time()
-        results = tool.search(query, top_k=3)
-        search_time = time.time() - start_time
-        
-        print(f"Found {len(results)} results in {search_time:.4f} seconds:")
-        for j, result in enumerate(results):
-            print(f"  Result {j+1}: {result['text'][:80]}... (score: {result['score']:.4f})")
-            print(f"    Metadata: {result['metadata']}")
+    console.print(f"Loading documents from '{data_dir}'...")
+    for i, filepath in enumerate(filepaths):
+        if i >= max_docs:
+            console.print(f"[dim]Reached max documents ({max_docs}), stopping loading.[/dim]")
+            break
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+                documents.append({
+                    "id": f"doc_{os.path.basename(filepath)}_{i}",
+                    "text": content,
+                    "metadata": {
+                        "source_file": os.path.basename(filepath),
+                        "path": filepath
+                    }
+                })
+        except Exception as e:
+            console.print(f"[yellow]Warning:[/yellow] Could not read file '{filepath}': {e}")
+            
+    console.print(f"Loaded {len(documents)} documents.")
+    return documents
 
-
-async def composite_operation_demo(use_gpu: bool = True):
-    """Demo using the composite semantic search operation."""
-    print_section("Composite Operation Demo")
-    
-    # Create the operation object
-    op = SemanticSearchOperation("semantic_search")
-    
-    # Create parameters
-    params = SemanticSearchParams(
-        texts=SAMPLE_TEXTS,
-        query="What is the meaning of existence?",
-        ids=[f"quote_{i+1}" for i in range(len(SAMPLE_TEXTS))],
-        metadata=SAMPLE_METADATA,
-        top_k=5,
-        use_gpu=use_gpu,
-        embedding_model="nomic-ai/nomic-embed-text-v2-moe"
-    )
-    
-    # Execute the operation
-    print("Executing semantic search operation...")
-    start_time = time.time()
-    results = await op.execute_with_stats(params)
-    
-    print(f"Operation completed in {time.time() - start_time:.2f} seconds")
-    
-    # Display the results
-    print("\nResults:")
-    for i, result in enumerate(results):
-        print(f"\nResult {i+1}: (score: {result['score']:.4f})")
-        print(f"  Text: {result['text'][:100]}...")
-        print(f"  Metadata: {result['metadata']}")
-    
-    # Display the backend info
-    if results and 'backend_info' in results[0]:
-        print("\nBackend Information:")
-        pprint(results[0]['backend_info'])
-
-
-async def custom_dataset_demo(dataset_file: str, query: str, use_gpu: bool = True):
-    """Demo using a custom dataset from a file."""
-    print_section(f"Custom Dataset Demo: {dataset_file}")
-    
-    # Load the dataset
-    try:
-        with open(dataset_file, 'r', encoding='utf-8') as f:
-            if dataset_file.endswith('.json'):
-                # Assuming JSON file with a list of objects with 'text' field
-                data = json.load(f)
-                if isinstance(data, list):
-                    texts = [item.get('text', str(item)) for item in data]
-                    metadata = [item for item in data]
-                else:
-                    texts = [data.get('text', str(data))]
-                    metadata = [data]
-            else:
-                # Assuming text file with one document per line
-                texts = [line.strip() for line in f if line.strip()]
-                metadata = [{"source": dataset_file, "line": i+1} for i in range(len(texts))]
-    except Exception as e:
-        print(f"Error loading dataset: {str(e)}")
+def display_results(results_data: Dict[str, Any]):
+    """Display semantic search results using rich Table."""
+    if not results_data or "results" not in results_data:
+        console.print("[yellow]No results found or invalid response format.[/yellow]")
         return
-    
-    # Get the semantic search tool
-    tool = get_semantic_tool("semantic_search")
-    tool.use_gpu = use_gpu
-    
-    # Index the documents
-    print(f"Indexing {len(texts)} documents...")
-    start_time = time.time()
-    
-    # Generate IDs for the texts
-    ids = [f"doc_{i+1}" for i in range(len(texts))]
-    
-    # Index the texts with metadata
-    tool.index_texts(texts, ids, metadata)
-    
-    print(f"Indexing completed in {time.time() - start_time:.2f} seconds")
-    
-    # Print backend info
-    backend_info = tool.get_backend_info()
-    print("\nBackend Information:")
-    pprint(backend_info)
-    
-    # Run search
-    print(f"\nSearching for: '{query}'")
-    start_time = time.time()
-    results = tool.search(query, top_k=5)
-    search_time = time.time() - start_time
-    
-    print(f"Found {len(results)} results in {search_time:.4f} seconds:")
-    for i, result in enumerate(results):
-        print(f"\nResult {i+1}: (score: {result['score']:.4f})")
-        print(f"  Text: {result['text'][:100]}...")
-        if 'metadata' in result:
-            print(f"  Metadata: {result['metadata']}")
 
+    matches = results_data.get("results", [])
+    query = results_data.get("query", "N/A")
+    backend = results_data.get("faiss_backend", "N/A")
+    top_k = results_data.get("top_k", "N/A")
+    match_count = len(matches)
 
-async def performance_benchmark(use_gpu: bool = True, num_docs: int = 1000, num_queries: int = 10):
-    """Performance benchmark for semantic search."""
-    print_section(f"Performance Benchmark: {num_docs} documents, {num_queries} queries")
-    
-    # Generate synthetic dataset
-    print(f"Generating {num_docs} synthetic documents...")
-    texts = []
-    for i in range(num_docs):
-        # Generate a synthetic document with some random words
-        import random
-        words = ["lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
-                "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore",
-                "magna", "aliqua", "enim", "ad", "minim", "veniam", "quis", "nostrud", "exercitation"]
+    console.print(Panel(f"Query: '[bold]{query}[/bold]' | Backend: {backend} | Top K: {top_k}", title="Search Summary"))
+
+    if match_count == 0:
+        console.print("[yellow]No matches found for this query.[/yellow]")
+        return
+
+    table = Table(title=f"Top {min(match_count, MAX_RESULTS_TO_SHOW)} Semantic Search Results")
+    table.add_column("Rank", style="dim", width=4)
+    table.add_column("Score", style="yellow", width=8)
+    table.add_column("Source File", style="cyan", no_wrap=True)
+    table.add_column("Text Snippet", style="white")
+
+    for i, result in enumerate(matches[:MAX_RESULTS_TO_SHOW]):
+        score = f"{result.get('score', 0.0):.4f}"
+        text_snippet = result.get('text', '')[:150].strip().replace('\n', ' ') + "..."
+        metadata = result.get('metadata', {})
+        source_file = metadata.get('source_file', 'N/A')
         
-        # Generate random document of 20-50 words
-        doc_len = random.randint(20, 50)
-        doc = " ".join(random.choice(words) for _ in range(doc_len))
-        texts.append(doc)
-    
-    # Generate random queries
-    queries = []
-    for i in range(num_queries):
-        # Generate random query of 3-7 words
-        query_len = random.randint(3, 7)
-        query = " ".join(random.choice(words) for _ in range(query_len))
-        queries.append(query)
-    
-    # Get the semantic search tool
-    tool = get_semantic_tool("semantic_search")
-    tool.use_gpu = use_gpu
-    
-    # Index the documents
-    print(f"Indexing {len(texts)} documents...")
-    index_start_time = time.time()
-    
-    # Generate IDs for the texts
-    ids = [f"doc_{i+1}" for i in range(len(texts))]
-    
-    # Index the texts
-    tool.index_texts(texts, ids)
-    
-    index_time = time.time() - index_start_time
-    print(f"Indexing completed in {index_time:.2f} seconds ({num_docs / index_time:.2f} docs/sec)")
-    
-    # Print backend info
-    backend_info = tool.get_backend_info()
-    print("\nBackend Information:")
-    pprint(backend_info)
-    
-    # Run searches for each query
-    print("\nPerforming searches:")
-    total_search_time = 0
-    for i, query in enumerate(queries):
+        table.add_row(
+            str(i + 1),
+            score,
+            source_file,
+            text_snippet
+        )
+
+    console.print(table)
+    if match_count > MAX_RESULTS_TO_SHOW:
+        console.print(f"[dim]... and {match_count - MAX_RESULTS_TO_SHOW} more matches not shown.[/dim]")
+    console.print()
+
+# --- Main Demo Function ---
+
+async def run_semantic_search_demo(query: str, data_dir: str):
+    """Run the semantic search demo using MCPClient."""
+    console.print(Panel.fit(
+        "[bold blue]TSAP Semantic Search Demo (MCP Client)[/bold blue]",
+        subtitle=f"Querying data from '{data_dir}'"
+    ))
+
+    # Load documents
+    print_section("Loading Data")
+    documents = load_documents(data_dir, MAX_DOCS_TO_INDEX)
+    if not documents:
+        console.print("[bold red]Failed to load documents. Exiting.[/bold red]")
+        return
+
+    texts_to_index = [doc["text"] for doc in documents]
+    ids_to_index = [doc["id"] for doc in documents]
+    metadata_to_index = [doc["metadata"] for doc in documents]
+
+    # Run search via MCP Client
+    print_section("Running Semantic Search via MCP")
+    async with MCPClient() as client:
+        # Check server connection
+        console.print("Checking server connection...")
+        info = await client.info()
+        # Improved connection check
+        if info.get("status") != "success" or info.get("error") is not None:
+            console.print("[bold red]Error connecting to server or server status not success:[/bold red]")
+            console.print(f"Response: {info}") # Print the full response for debugging
+            return
+        else:
+            console.print("[green]Server connection successful.[/green]")
+            # console.print(Syntax(json.dumps(info.get('data', {}), indent=2), "json", theme="default"))
+            console.print()
+
+        # Perform the search
+        console.print(f"Sending search request for query: '[bold]{query}[/bold]'...")
         start_time = time.time()
-        results = tool.search(query, top_k=10)
-        search_time = time.time() - start_time
-        total_search_time += search_time
         
-        print(f"Query {i+1}: Found {len(results)} results in {search_time:.4f} seconds")
-    
-    avg_search_time = total_search_time / num_queries
-    print(f"\nAverage search time: {avg_search_time:.4f} seconds ({1/avg_search_time:.2f} queries/sec)")
+        try:
+            search_response = await client.semantic_search(
+                texts=texts_to_index,
+                query=query,
+                ids=ids_to_index,
+                metadata=metadata_to_index,
+                top_k=10 # Request more than we display initially
+            )
+            execution_time = time.time() - start_time
+            console.print(f"Search request completed in {execution_time:.2f} seconds.")
 
+        except Exception as e:
+            console.print(f"[bold red]Error during semantic_search call:[/bold red] {e}")
+            import traceback
+            console.print(traceback.format_exc())
+            return
+
+        # Process and display results
+        print_section("Search Results")
+        # Improved check: Verify status is success AND error is None/null
+        if search_response.get("status") != "success" or search_response.get("error") is not None:
+            console.print("[bold red]Server returned an error or unexpected status:[/bold red]")
+            # Print the whole response if it's not success or has an error
+            error_content = search_response.get("error", "No error field found")
+            try:
+                # Try pretty printing if it's json-serializable
+                error_display = json.dumps(error_content, indent=2)
+            except TypeError:
+                # Otherwise, just convert to string
+                error_display = str(error_content)
+                
+            console.print(f"Status: {search_response.get('status', 'N/A')}")
+            console.print("Error Content:")
+            console.print(Syntax(error_display, "json" if isinstance(error_content, (dict, list)) else "text", theme="default", line_numbers=True))
+            # Optionally print the full response for more context
+            # console.print("[dim]Full response:[/dim]")
+            # console.print(Syntax(json.dumps(search_response, indent=2), "json", theme="default"))
+        elif "data" in search_response:
+            # This path is now only taken if status is 'success' and error is None
+            display_results(search_response["data"])
+        else:
+            # This case might indicate success status but missing data field
+            console.print("[bold red]Unexpected response format: Status success but no data field.[/bold red]")
+            console.print(Syntax(json.dumps(search_response, indent=2), "json", theme="default", line_numbers=True))
+
+# --- Entry Point ---
 
 async def main():
-    """Main function."""
-    parser = argparse.ArgumentParser(description="Semantic Search Demo")
-    parser.add_argument("--no-gpu", action="store_true", help="Disable GPU usage")
-    parser.add_argument("--benchmark", action="store_true", help="Run performance benchmark")
-    parser.add_argument("--dataset", type=str, help="Path to custom dataset file")
-    parser.add_argument("--query", type=str, default="What is the meaning of life?", 
-                       help="Query for custom dataset search")
-    parser.add_argument("--demo-type", type=str, choices=["direct", "composite", "all"], 
-                       default="all", help="Type of demo to run")
+    # Declare global first
+    global MAX_DOCS_TO_INDEX
     
-    args = parser.parse_args()
-    use_gpu = not args.no_gpu
-    
-    print(f"Starting Semantic Search Demo (GPU {'disabled' if args.no_gpu else 'enabled'})")
-    
-    if args.benchmark:
-        await performance_benchmark(use_gpu)
-        return
-    
-    if args.dataset:
-        await custom_dataset_demo(args.dataset, args.query, use_gpu)
-        return
-    
-    if args.demo_type in ["direct", "all"]:
-        await direct_tool_demo(use_gpu)
-    
-    if args.demo_type in ["composite", "all"]:
-        await composite_operation_demo(use_gpu)
+    parser = argparse.ArgumentParser(description="Run TSAP Semantic Search Demo using MCP Client.")
+    parser.add_argument(
+        "--query",
+        type=str,
+        default=DEFAULT_QUERY,
+        help=f"The semantic query to run. Default: '{DEFAULT_QUERY}'"
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=EXAMPLE_DATA_DIR,
+        help=f"Directory containing documents to search. Default: '{EXAMPLE_DATA_DIR}'"
+    )
+    parser.add_argument(
+        "--max-docs",
+        type=int,
+        default=MAX_DOCS_TO_INDEX,
+        help=f"Maximum number of documents to load and index. Default: {MAX_DOCS_TO_INDEX}"
+    )
 
+    args = parser.parse_args()
+    
+    # Update global config if needed (e.g., MAX_DOCS_TO_INDEX)
+    MAX_DOCS_TO_INDEX = args.max_docs
+
+    await run_semantic_search_demo(args.query, args.data_dir)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        console.print("[yellow]Demo interrupted by user.[/yellow]")
+    except Exception as e:
+        console.print(f"[bold red]Unhandled error in demo:[/bold red] {str(e)}")
+        import traceback
+        console.print(traceback.format_exc()) 

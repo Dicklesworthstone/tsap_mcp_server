@@ -13,10 +13,31 @@ import functools
 from typing import Dict, Any, Optional, Union, Callable, List, Tuple
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from datetime import datetime
 
 from tsap.utils.logging import logger
 from tsap.config import get_config
 from tsap.constants import DEFAULT_CACHE_DIR
+from pydantic import BaseModel
+
+
+class CustomJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for cache serialization."""
+    
+    def default(self, obj):
+        # Handle Pydantic models
+        if isinstance(obj, BaseModel):
+            if hasattr(obj, 'model_dump'):
+                return obj.model_dump()
+            elif hasattr(obj, 'dict'):
+                return obj.dict()
+        
+        # Handle datetime objects
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+            
+        # Let the base class handle it or raise TypeError
+        return super().default(obj)
 
 
 class CacheManager:
@@ -123,8 +144,16 @@ class CacheManager:
         Returns:
             Cache key as a string
         """
+        # Handle Pydantic models by converting to dict if possible
+        if hasattr(params, 'model_dump'):
+            params_dict = params.model_dump()
+        elif hasattr(params, 'dict'):
+            params_dict = params.dict()
+        else:
+            params_dict = params
+            
         # Serialize parameters to a consistent string
-        params_str = json.dumps(params, sort_keys=True)
+        params_str = json.dumps(params_dict, sort_keys=True, cls=CustomJSONEncoder)
         
         # Create a hash of the operation and parameters
         key = hashlib.sha256(f"{operation}:{params_str}".encode()).hexdigest()
@@ -163,7 +192,7 @@ class CacheManager:
             data: Data to write
         """
         with open(path, "w") as f:
-            json.dump(data, f)
+            json.dump(data, f, cls=CustomJSONEncoder)
     
     def _update_access(self, key: str) -> None:
         """
@@ -351,11 +380,11 @@ class CacheManager:
         
         try:
             # Try to serialize to ensure it's JSON serializable
-            serialized = json.dumps(result)
+            serialized = json.dumps(result, cls=CustomJSONEncoder)
             size = len(serialized)
-        except (TypeError, OverflowError):
+        except (TypeError, OverflowError) as e:
             logger.warning(
-                f"Cannot cache non-serializable result for {operation}",
+                f"Cannot cache non-serializable result for {operation}: {str(e)}",
                 component="cache"
             )
             return

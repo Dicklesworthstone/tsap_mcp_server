@@ -8,6 +8,7 @@ import signal
 import asyncio
 from typing import Optional
 from contextlib import asynccontextmanager
+import traceback
 
 import uvicorn
 from fastapi import FastAPI, APIRouter
@@ -16,8 +17,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from tsap.utils.logging import logger
 from tsap.config import get_config
 from tsap.version import __version__, get_version_info
-from tsap.performance_mode import get_performance_mode, set_performance_mode
+from tsap.performance_mode import get_performance_mode
 from tsap.mcp.protocol import MCPRequest, MCPResponse, MCPError
+from tsap.mcp.handler import handle_request, initialize_handlers
 
 
 # Global server instance
@@ -49,6 +51,9 @@ async def lifespan(app: FastAPI):
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop = asyncio.get_event_loop()
             loop.add_signal_handler(sig, _shutdown_event.set)
+            
+        # Make sure MCP handlers are initialized
+        initialize_handlers()
             
         # Load all plugins
         # TODO: Implement plugin loading
@@ -180,6 +185,12 @@ def _create_mcp_router() -> APIRouter:
         Returns:
             MCP response
         """
+        # Print request details for debugging
+        print(f"REQUEST RECEIVED: {request}")
+        print(f"  Command: {request.command}")
+        print(f"  Request ID: {request.request_id}")
+        print(f"  Args: {request.args}")
+        
         logger.info(
             f"Received MCP request: {request.command}",
             component="mcp",
@@ -188,19 +199,15 @@ def _create_mcp_router() -> APIRouter:
         )
         
         try:
-            # Set performance mode based on request
-            if request.mode:
-                set_performance_mode(request.mode)
-                
-            # TODO: Dispatch to appropriate handler based on command
-            
-            # Temporary placeholder response
-            response = MCPResponse(
-                request_id=request.request_id,
-                status="success",
-                command=request.command,
-                data={"message": "Not implemented yet"},
-            )
+            # Use the handle_request function from mcp/handler.py
+            print("About to call handle_request...")
+            response = await handle_request(request)
+            print(f"RESPONSE: {response}")
+            print(f"  Status: {response.status}")
+            if response.data:
+                print(f"  Data: {response.data}")
+            if response.error:
+                print(f"  Error: {response.error}")
             
             logger.success(
                 f"Completed MCP request: {request.command}",
@@ -212,12 +219,16 @@ def _create_mcp_router() -> APIRouter:
             return response
             
         except Exception as e:
+            # Print a detailed error for debugging
             logger.error(
                 f"Error processing MCP request: {str(e)}",
                 component="mcp",
                 operation="error",
                 exception=e,
-                context={"request_id": request.request_id}
+                context={
+                    "request_id": request.request_id,
+                    "traceback": traceback.format_exc()
+                }
             )
             
             return MCPResponse(

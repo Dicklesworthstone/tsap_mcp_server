@@ -43,6 +43,7 @@ class MCPCommandType(str, Enum):
     CORPUS_MAP = "corpus_map"
     COUNTERFACTUAL_ANALYZE = "counterfactual_analyze"
     STRATEGY_COMPILE = "strategy_compile"
+    SEMANTIC_SEARCH = "semantic_search"
     
     # Meta commands
     INFO = "info"
@@ -134,9 +135,9 @@ class MCPResponse(BaseModel):
     @model_validator(mode='after')
     def validate_status_and_data(cls, values):
         """Validate that status, data, and error are consistent."""
-        status = values.get("status")
-        data = values.get("data")  # noqa: F841
-        error = values.get("error")
+        status = values.status
+        data = values.data  # noqa: F841
+        error = values.error
         
         if status == "success" and error is not None:
             raise ValueError("Error should be None when status is 'success'")

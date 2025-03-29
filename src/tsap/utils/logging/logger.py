@@ -179,7 +179,7 @@ class Logger:
         self.console.print(renderable)
         
         # Capture if enabled
-        if self.capture_output is not None:
+        if self.captured_logs is not None:
             self.captured_logs.append({
                 "level": level,
                 "message": message,

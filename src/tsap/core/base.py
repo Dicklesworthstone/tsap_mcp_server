@@ -16,6 +16,121 @@ from tsap.performance_mode import get_parameter
 from tsap.cache import cache_result, get_cached_result
 
 
+class BaseCoreTool(ABC):
+    """Base class for core tools that wrap CLI utilities."""
+    
+    def __init__(self, name: str):
+        """Initialize a core tool.
+        
+        Args:
+            name: Tool name
+        """
+        self.name = name
+        self.statistics: Dict[str, Any] = {
+            "calls": 0,
+            "errors": 0,
+            "execution_time": 0.0,
+        }
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get tool statistics.
+        
+        Returns:
+            Dictionary with tool statistics
+        """
+        return dict(self.statistics)
+    
+    def reset_statistics(self) -> None:
+        """Reset tool statistics."""
+        self.statistics = {
+            "calls": 0,
+            "errors": 0,
+            "execution_time": 0.0,
+        }
+
+
+class ToolRegistry:
+    """Registry for core tools."""
+    
+    _tools: Dict[str, Type[BaseCoreTool]] = {}
+    _instances: Dict[str, BaseCoreTool] = {}
+    
+    @classmethod
+    def register(cls, name: str, tool_class: Type[BaseCoreTool]) -> None:
+        """Register a core tool class.
+        
+        Args:
+            name: Tool name
+            tool_class: Tool class
+        """
+        cls._tools[name] = tool_class
+        logger.debug(f"Registered core tool: {name}")
+    
+    @classmethod
+    def get_tool_class(cls, name: str) -> Optional[Type[BaseCoreTool]]:
+        """Get a core tool class by name.
+        
+        Args:
+            name: Tool name
+            
+        Returns:
+            Tool class or None if not found
+        """
+        return cls._tools.get(name)
+    
+    @classmethod
+    def get_tool(cls, name: str) -> Optional[BaseCoreTool]:
+        """Get a core tool instance by name.
+        
+        If an instance doesn't exist, it will be created.
+        
+        Args:
+            name: Tool name
+            
+        Returns:
+            Tool instance or None if not found
+        """
+        # Check if we already have an instance
+        if name in cls._instances:
+            return cls._instances[name]
+        
+        # Get the tool class
+        tool_class = cls.get_tool_class(name)
+        if not tool_class:
+            return None
+        
+        # Create an instance
+        instance = tool_class()
+        cls._instances[name] = instance
+        
+        return instance
+    
+    @classmethod
+    def list_tools(cls) -> List[str]:
+        """Get a list of all registered tools.
+        
+        Returns:
+            List of tool names
+        """
+        return list(cls._tools.keys())
+
+
+def register_tool(name: str) -> Callable[[Type[BaseCoreTool]], Type[BaseCoreTool]]:
+    """Decorator to register a core tool.
+    
+    Args:
+        name: Tool name
+        
+    Returns:
+        Decorator function
+    """
+    def decorator(cls: Type[BaseCoreTool]) -> Type[BaseCoreTool]:
+        ToolRegistry.register(name, cls)
+        return cls
+    
+    return decorator
+
+
 class CompositeError(TSAPError):
     """Error raised when a composite operation fails."""
     

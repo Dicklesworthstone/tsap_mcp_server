@@ -4,8 +4,7 @@ Data models for MCP protocol operations.
 This module defines Pydantic models for the different MCP operations 
 and their parameters and results.
 """
-from enum import Enum
-from typing import Dict, List, Any, Optional, Union, Set
+from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from pydantic import BaseModel, Field, validator, root_validator
 
@@ -98,7 +97,7 @@ class JqQueryParams(BaseModel):
     compact_output: bool = Field(False, description="Output compact JSON")
     monochrome_output: bool = Field(True, description="Disable colored output")
     
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_input(cls, values):
         """Validate that at least one input source is provided."""
         input_json = values.get("input_json")
@@ -166,7 +165,7 @@ class HtmlProcessParams(BaseModel):
     extract_text: bool = Field(False, description="Extract plain text from HTML")
     extract_metadata: bool = Field(False, description="Extract metadata from HTML")
     
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_input(cls, values):
         """Validate that at least one input source is provided."""
         html = values.get("html")
@@ -256,7 +255,7 @@ class TableProcessParams(BaseModel):
         description="Operations to perform on the table"
     )
     
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_input(cls, values):
         """Validate that at least one input source is provided."""
         table_data = values.get("table_data")
@@ -476,7 +475,7 @@ class PatternAnalyzerParams(BaseModel):
         description="Maximum patterns to return per type"
     )
     
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_input(cls, values):
         """Validate that at least one input source is provided."""
         text = values.get("text")
@@ -543,7 +542,7 @@ class CodeAnalyzerParams(BaseModel):
     )
     include_metrics: bool = Field(False, description="Include code metrics in analysis")
     
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_input(cls, values):
         """Validate that at least one input source is provided."""
         code = values.get("code")
@@ -897,7 +896,7 @@ class CounterfactualAnalyzerParams(BaseModel):
         ..., 
         description="Types of counterfactual analysis to perform"
     )
-    schema: Optional[Dict[str, Any]] = Field(
+    analysis_schema: Optional[Dict[str, Any]] = Field(
         None, 
         description="Schema for structured counterfactual analysis"
     )
@@ -924,6 +923,17 @@ class CounterfactualAnalyzerParams(BaseModel):
                     f"Allowed types: {', '.join(allowed)}"
                 )
         return v
+        
+    def model_dump(self) -> Dict[str, Any]:
+        """Make the model JSON serializable for cache operations."""
+        return {
+            "document_paths": self.document_paths,
+            "reference_paths": self.reference_paths,
+            "analysis_types": self.analysis_types,
+            "analysis_schema": self.analysis_schema,
+            "max_counterfactuals": self.max_counterfactuals,
+            "min_confidence": self.min_confidence
+        }
 
 
 class Counterfactual(BaseModel):
@@ -1177,7 +1187,7 @@ class PatternLibraryParams(BaseModel):
             raise ValueError(f"Operation must be one of: {', '.join(allowed)}")
         return v
     
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_params(cls, values):
         """Validate parameters based on operation."""
         operation = values.get("operation")
@@ -1308,6 +1318,275 @@ class StrategyJournalResult(BaseModel):
     execution_time: float = Field(..., description="Execution time in seconds")
 
 
+class StructureSearchParams(BaseModel):
+    """Parameters for structure search operation."""
+    
+    paths: List[str] = Field(..., description="Paths to search in")
+    structure_type: str = Field(..., description="Type of structure to search for")
+    structure_pattern: str = Field(..., description="Pattern describing the structure")
+    file_patterns: Optional[List[str]] = Field(
+        None, 
+        description="Only search files matching these glob patterns"
+    )
+    exclude_patterns: Optional[List[str]] = Field(
+        None, 
+        description="Exclude files matching these glob patterns"
+    )
+    max_matches: Optional[int] = Field(None, description="Maximum matches to return")
+    min_confidence: float = Field(0.5, description="Minimum confidence score (0.0-1.0)")
+    include_context: bool = Field(True, description="Include surrounding context")
+    context_lines: int = Field(2, description="Number of context lines to include")
+    
+    @validator("structure_type")
+    def validate_structure_type(cls, v):
+        """Validate structure type."""
+        allowed = [
+            "function", "class", "method", "block", "section", "nested", "custom",
+            "conditional", "loop", "declaration", "definition", "import"
+        ]
+        if v not in allowed:
+            raise ValueError(f"Structure type must be one of: {', '.join(allowed)}")
+        return v
+
+
+class StructureSearchResult(BaseModel):
+    """Result of a structure search operation."""
+    
+    matches: List[Dict[str, Any]] = Field(
+        default_factory=list, 
+        description="Matches found"
+    )
+    structures: List[Dict[str, Any]] = Field(
+        default_factory=list, 
+        description="Structures found"
+    )
+    stats: Dict[str, Any] = Field(
+        default_factory=dict, 
+        description="Search statistics"
+    )
+    truncated: bool = Field(False, description="Whether results were truncated")
+    execution_time: float = Field(..., description="Execution time in seconds")
+
+
+class DiffChunk(BaseModel):
+    """Chunk of a diff between files or texts."""
+    
+    type: str = Field(..., description="Chunk type (added, removed, changed, unchanged)")
+    old_start: Optional[int] = Field(None, description="Start line in old content (1-based)")
+    old_count: Optional[int] = Field(None, description="Line count in old content")
+    new_start: Optional[int] = Field(None, description="Start line in new content (1-based)")
+    new_count: Optional[int] = Field(None, description="Line count in new content")
+    content: List[str] = Field(default_factory=list, description="Lines in the chunk")
+    changes: Optional[List[Dict[str, Any]]] = Field(
+        None, 
+        description="Detailed changes within lines"
+    )
+
+
+class DiffGeneratorParams(BaseModel):
+    """Parameters for diff generation operation."""
+    
+    old_content: Optional[str] = Field(None, description="Old content as string")
+    new_content: Optional[str] = Field(None, description="New content as string")
+    old_file: Optional[str] = Field(None, description="Path to old file")
+    new_file: Optional[str] = Field(None, description="Path to new file")
+    context_lines: int = Field(3, description="Number of context lines around changes")
+    ignore_whitespace: bool = Field(False, description="Ignore whitespace changes")
+    ignore_case: bool = Field(False, description="Ignore case changes")
+    output_format: str = Field("unified", description="Output format (unified, context, html, json)")
+    
+    @root_validator(skip_on_failure=True)
+    def validate_input(cls, values):
+        """Validate that at least one input source is provided."""
+        old_content = values.get("old_content")
+        new_content = values.get("new_content")
+        old_file = values.get("old_file")
+        new_file = values.get("new_file")
+        
+        if old_content is None and old_file is None:
+            raise ValueError("Either old_content or old_file must be provided")
+        
+        if new_content is None and new_file is None:
+            raise ValueError("Either new_content or new_file must be provided")
+            
+        return values
+    
+    @validator("output_format")
+    def validate_output_format(cls, v):
+        """Validate output format."""
+        allowed = ["unified", "context", "html", "json"]
+        if v not in allowed:
+            raise ValueError(f"Output format must be one of: {', '.join(allowed)}")
+        return v
+
+
+class DiffGeneratorResult(BaseModel):
+    """Result of a diff generation operation."""
+    
+    diff_text: Optional[str] = Field(None, description="Diff as text")
+    diff_html: Optional[str] = Field(None, description="Diff as HTML")
+    chunks: List[DiffChunk] = Field(default_factory=list, description="Diff chunks")
+    stats: Dict[str, Any] = Field(
+        default_factory=dict, 
+        description="Diff statistics"
+    )
+    execution_time: float = Field(..., description="Execution time in seconds")
+
+
+class RegexGeneratorParams(BaseModel):
+    """Parameters for regex pattern generation operation."""
+    
+    examples: List[str] = Field(..., description="Example strings to match")
+    negative_examples: Optional[List[str]] = Field(
+        None, 
+        description="Example strings that should not match"
+    )
+    pattern_complexity: str = Field(
+        "medium", 
+        description="Desired complexity level (simple, medium, complex)"
+    )
+    capture_groups: bool = Field(True, description="Include capture groups in pattern")
+    pattern_type: str = Field("standard", description="Pattern type (standard, extended, pcre)")
+    test_pattern: bool = Field(True, description="Test the generated pattern against examples")
+    
+    @validator("pattern_complexity")
+    def validate_pattern_complexity(cls, v):
+        """Validate pattern complexity."""
+        allowed = ["simple", "medium", "complex"]
+        if v not in allowed:
+            raise ValueError(f"Pattern complexity must be one of: {', '.join(allowed)}")
+        return v
+    
+    @validator("pattern_type")
+    def validate_pattern_type(cls, v):
+        """Validate pattern type."""
+        allowed = ["standard", "extended", "pcre"]
+        if v not in allowed:
+            raise ValueError(f"Pattern type must be one of: {', '.join(allowed)}")
+        return v
+
+
+class RegexGeneratorResult(BaseModel):
+    """Result of a regex pattern generation operation."""
+    
+    pattern: str = Field(..., description="Generated regex pattern")
+    capture_groups: Optional[Dict[str, str]] = Field(
+        None, 
+        description="Description of capture groups"
+    )
+    matches_all_examples: bool = Field(True, description="Whether pattern matches all examples")
+    avoids_all_negative: bool = Field(True, description="Whether pattern avoids all negative examples")
+    test_results: Dict[str, Any] = Field(
+        default_factory=dict, 
+        description="Pattern test results"
+    )
+    alternative_patterns: Optional[List[str]] = Field(
+        None, 
+        description="Alternative pattern suggestions"
+    )
+    execution_time: float = Field(..., description="Execution time in seconds")
+
+
+class FilenamePatternParams(BaseModel):
+    """Parameters for filename pattern discovery operation."""
+    
+    directory: str = Field(..., description="Directory to analyze")
+    recursive: bool = Field(True, description="Recursively analyze subdirectories")
+    include_patterns: Optional[List[str]] = Field(
+        None, 
+        description="Only include files matching these glob patterns"
+    )
+    exclude_patterns: Optional[List[str]] = Field(
+        None, 
+        description="Exclude files matching these glob patterns"
+    )
+    min_pattern_frequency: int = Field(3, description="Minimum frequency to consider a pattern")
+    max_patterns: Optional[int] = Field(None, description="Maximum patterns to discover")
+    analyze_extensions: bool = Field(True, description="Analyze file extensions")
+    analyze_prefixes: bool = Field(True, description="Analyze filename prefixes")
+    analyze_suffixes: bool = Field(True, description="Analyze filename suffixes")
+    analyze_segments: bool = Field(True, description="Analyze filename segments")
+    analyze_numbering: bool = Field(True, description="Analyze numbering patterns")
+    generate_regexes: bool = Field(True, description="Generate regex patterns for discovered patterns")
+
+
+class FilenamePatternResult(BaseModel):
+    """Result of a filename pattern discovery operation."""
+    
+    patterns: Dict[str, List[Dict[str, Any]]] = Field(
+        default_factory=dict, 
+        description="Discovered filename patterns by type"
+    )
+    file_count: int = Field(0, description="Total number of files analyzed")
+    extensions: Dict[str, int] = Field(
+        default_factory=dict, 
+        description="File extensions and their frequencies"
+    )
+    common_prefixes: Dict[str, int] = Field(
+        default_factory=dict, 
+        description="Common filename prefixes and their frequencies"
+    )
+    common_suffixes: Dict[str, int] = Field(
+        default_factory=dict, 
+        description="Common filename suffixes and their frequencies"
+    )
+    numbering_patterns: List[Dict[str, Any]] = Field(
+        default_factory=list, 
+        description="Detected numbering patterns"
+    )
+    regex_patterns: Optional[Dict[str, str]] = Field(
+        None, 
+        description="Generated regex patterns for discovered patterns"
+    )
+    execution_time: float = Field(..., description="Execution time in seconds")
+
+
+class DocumentProfilerParams(BaseModel):
+    """Parameters for document profiling operation."""
+    
+    file_paths: List[str] = Field(..., description="Paths to documents to profile")
+    extract_text: bool = Field(True, description="Extract and analyze text content")
+    analyze_structure: bool = Field(True, description="Analyze document structure")
+    analyze_metadata: bool = Field(True, description="Analyze document metadata")
+    calculate_statistics: bool = Field(True, description="Calculate text statistics")
+    detect_language: bool = Field(True, description="Detect document language")
+    extract_entities: bool = Field(False, description="Extract named entities from text")
+    extract_keywords: bool = Field(True, description="Extract keywords from text")
+    generate_summary: bool = Field(False, description="Generate document summary")
+    max_keywords: int = Field(20, description="Maximum keywords to extract")
+    max_summary_length: Optional[int] = Field(None, description="Maximum summary length in characters")
+    custom_analyzers: Optional[List[Dict[str, Any]]] = Field(
+        None, 
+        description="Custom document analyzers to use"
+    )
+
+
+class DocumentProfilerResult(BaseModel):
+    """Result of a document profiling operation."""
+    
+    profiles: List[Dict[str, Any]] = Field(
+        default_factory=list, 
+        description="Detailed profiles for each document"
+    )
+    summary: Dict[str, Any] = Field(
+        default_factory=dict, 
+        description="Summary of all documents profiled"
+    )
+    common_entities: Dict[str, int] = Field(
+        default_factory=dict, 
+        description="Common entities across documents"
+    )
+    common_keywords: Dict[str, int] = Field(
+        default_factory=dict, 
+        description="Common keywords across documents"
+    )
+    content_similarities: Optional[List[Dict[str, Any]]] = Field(
+        None, 
+        description="Similarities between documents"
+    )
+    execution_time: float = Field(..., description="Execution time in seconds")
+
+
 class RuntimeLearningParams(BaseModel):
     """Parameters for runtime learning operation."""
     
@@ -1324,15 +1603,15 @@ class RuntimeLearningParams(BaseModel):
     max_iterations: Optional[int] = Field(None, description="Maximum learning iterations")
     convergence_threshold: Optional[float] = Field(
         None, 
-        description="Convergence threshold for learning"
+        description="Convergence threshold"
     )
     
     @validator("learning_target")
     def validate_learning_target(cls, v):
         """Validate learning target."""
         allowed = [
-            "pattern", "strategy", "parameter", "search_effectiveness", 
-            "extraction_accuracy", "ranking"
+            "pattern_recognition", "ranking_function", "relevance_model",
+            "confidence_scoring", "structure_detection", "custom"
         ]
         if v not in allowed:
             raise ValueError(f"Learning target must be one of: {', '.join(allowed)}")

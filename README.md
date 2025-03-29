@@ -163,6 +163,20 @@ source .venv/bin/activate
 uv pip install -e '.[dev,docs,performance,database,visualization,analysis,cloud]'         
 ```
 
+### GPU Support
+
+By default, TSAP installs with faiss-cpu for vector operations and semantic search support. To enable GPU acceleration:
+
+1. Make sure you have CUDA properly installed on your system
+2. Install faiss-gpu manually with a Python version that has compatible wheels:
+
+```bash
+# Only works with Python versions that have compatible wheels (not Python 3.13 yet)
+pip install faiss-gpu
+```
+
+The system will automatically detect and use GPU acceleration if the faiss-gpu package is installed correctly. If installation fails or if GPU initialization fails at runtime, the system will automatically fall back to CPU mode.
+
 ### Usage
 
 Run the server:

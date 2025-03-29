@@ -3,14 +3,15 @@ import asyncio
 import os
 import json
 from typing import List
-
 from rich import print as rich_print
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
-from rich.console import console
-
+from rich.console import Console
 from api_client import TSAPClient, API_KEY # Import from our client module
+
+console = Console()
+
 
 # --- Configuration ---
 DOC_DIR = "tsap_example_data/documents"

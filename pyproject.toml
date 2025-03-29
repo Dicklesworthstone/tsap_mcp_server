@@ -59,7 +59,8 @@ dependencies = [
     "msgpack>=1.0.7",             # MessagePack serialization
     "tabulate>=0.9.0",            # Table formatting
     "pandas>=2.2.0",              # Data analysis
-    
+    "scikit-learn>=1.3.2",        # ML utilities including vector normalization
+
     # File and Document Processing
     "pypdf>=4.0.0",               # PDF processing
     "pdfminer.six>=20231228",     # Advanced PDF text extraction
@@ -110,6 +111,13 @@ dependencies = [
     "pluggy>=1.3.0",              # Plugin management
     "argon2",                     # Password hashing
     "pyzipper",                   # Zip utilities
+    
+    # Semantic search and vector operations (CPU version by default)
+    "faiss-cpu>=1.7.0",           # FAISS CPU for vector search
+    "nomic>=3.0.8",               # Embedding models
+    "torch>=2.0.0",               # PyTorch for tensor operations
+    "numpy>=1.24.0",              # Required for array operations
+    "sentence-transformers>=2.2.2", # Embedding models
 ]
 
 [project.optional-dependencies]
@@ -185,6 +193,24 @@ cloud = [
     "azure-storage-blob>=12.19.0", # Azure Blob Storage
     "docker>=7.0.0",              # Docker API
     "kubernetes>=29.0.0",         # Kubernetes API
+]
+semantic = [
+    "nomic>=3.0.8",               # Embedding models including nomic-embed-text-v2.0
+    "torch>=2.0.0",               # PyTorch for tensor operations
+    "numpy>=1.24.0",              # Required for array operations
+    "sentence-transformers>=2.2.2", # Alternative embedding models
+]
+# Note: GPU support requires manual installation of faiss-gpu
+# compatible with your Python version and CUDA installation
+# Example: pip install faiss-gpu==1.7.2 
+
+# Full dependency group that includes everything (CPU version only)
+all = [
+    "faiss-cpu>=1.7.0",           # FAISS CPU version
+    "nomic>=3.0.8",               # Embedding models 
+    "torch>=2.0.0",               # PyTorch
+    "numpy>=1.24.0",              # Required for arrays
+    "einops",
 ]
 
 [project.urls]

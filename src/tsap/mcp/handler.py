@@ -22,10 +22,17 @@ from tsap.analysis.code import analyze_code
 from tsap.analysis.documents import explore_documents
 from tsap.analysis.strategy_compiler import compile_strategy
 from tsap.evolution.pattern_analyzer import analyze_pattern
+from tsap.composite.document_profiler import profile_documents
+import faiss
+from tsap.composite.semantic_search import SemanticSearchParams, get_operation
 
 from .protocol import (
     MCPRequest, MCPResponse, MCPCommandType,
-    create_success_response, create_error_response
+    create_success_response, create_error_response,
+)
+
+from .models import (
+    RipgrepSearchParams,
 )
 
 
@@ -253,6 +260,7 @@ def handle_list_tools_command(request: MCPRequest, start_time: float) -> MCPResp
             {"name": MCPCommandType.HTML_PROCESS, "description": "Process HTML content"},
             {"name": MCPCommandType.PDF_EXTRACT, "description": "Extract text from PDF"},
             {"name": MCPCommandType.TABLE_PROCESS, "description": "Process tabular data"},
+            {"name": MCPCommandType.SEMANTIC_SEARCH, "description": "Semantic search"},
         ],
         "composite": [
             {"name": MCPCommandType.PARALLEL_SEARCH, "description": "Search with multiple patterns in parallel"},
@@ -265,6 +273,7 @@ def handle_list_tools_command(request: MCPRequest, start_time: float) -> MCPResp
             {"name": MCPCommandType.DIFF_GENERATE, "description": "Generate diff between texts"},
             {"name": MCPCommandType.REGEX_GENERATE, "description": "Generate regex for patterns"},
             {"name": MCPCommandType.DOCUMENT_PROFILE, "description": "Create document profile"},
+            {"name": MCPCommandType.SEMANTIC_SEARCH, "description": "Semantic search"},
         ],
         "analysis": [
             {"name": MCPCommandType.CODE_ANALYZE, "description": "Analyze code"},
@@ -327,13 +336,17 @@ def initialize_handlers():
     
     # Register evolution tools
     register_command_handler(MCPCommandType.PATTERN_ANALYZE, handle_pattern_analyze)
+    register_command_handler(MCPCommandType.DOCUMENT_PROFILE, handle_document_profile)
+    
+    # Register test handler
+    register_command_handler("test", handle_test)
     
     logger.info(
         "Registered MCP command handlers",
         component="mcp",
         operation="register_handlers",
         context={
-            "handler_count": 10,  # Updated handler count
+            "handler_count": len(_command_handlers),
         }
     )
 
@@ -354,8 +367,31 @@ async def handle_ripgrep_search(args: Dict[str, Any]) -> Dict[str, Any]:
         operation="ripgrep_search"
     )
     
+    # Convert args dictionary to RipgrepSearchParams object with field adaptations
+    adapted_args = args.copy()
+    
+    # Handle file_types/file_patterns and exclude_file_types/exclude_patterns differences
+    if "file_types" in adapted_args:
+        adapted_args["file_patterns"] = adapted_args.pop("file_types")
+        
+    if "exclude_file_types" in adapted_args:
+        adapted_args["exclude_patterns"] = adapted_args.pop("exclude_file_types")
+    
+    # Add defaults for required fields in models.py that are not in protocol.py
+    if "whole_word" not in adapted_args:
+        adapted_args["whole_word"] = False
+        
+    if "regex" not in adapted_args:
+        adapted_args["regex"] = True
+        
+    if "invert_match" not in adapted_args:
+        adapted_args["invert_match"] = False
+        
+    # Create params object
+    params = RipgrepSearchParams(**adapted_args)
+    
     # Execute ripgrep search
-    result = await ripgrep_search(args)
+    result = await ripgrep_search(params)
     
     # Convert to serializable form
     return result.model_dump()
@@ -574,6 +610,81 @@ async def handle_sqlite_query(args: Dict[str, Any]) -> Dict[str, Any]:
     
     # Convert to serializable form
     return result.model_dump()
+
+
+# Document Profiling Handler
+@command_handler(MCPCommandType.DOCUMENT_PROFILE)
+async def handle_document_profile(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle document_profile command.
+    
+    Args:
+        args: Command arguments (e.g., document_paths, include_content_features, compare_documents)
+        
+    Returns:
+        Command result containing profiles and comparisons
+    """
+    logger.info(
+        "Handling document_profile command",
+        component="mcp",
+        operation="document_profile"
+    )
+    
+    # Execute document profiling
+    # Note: Mapping args directly, assuming keys match function parameters
+    result = await profile_documents(
+        document_paths=args.get("document_paths", []),
+        include_content_features=args.get("include_content_features", True),
+        compare_documents=args.get("compare_documents", True)
+    )
+    
+    # Result is already a dict, no model_dump needed
+    return result
+
+
+# Semantic Search Handler
+@command_handler(MCPCommandType.SEMANTIC_SEARCH)
+async def handle_semantic_search(args: Dict[str, Any]) -> Dict[str, Any]:
+    texts = args["texts"]
+    query = args["query"]
+    ids = args.get("ids", [f"doc_{i}" for i in range(len(texts))])
+    top_k = args.get("top_k", 10)
+
+    op = get_operation("semantic_search")
+    params = SemanticSearchParams(texts=texts, query=query, ids=ids, top_k=top_k)
+    result = await op.execute_with_stats(params)
+
+    backend = "gpu" if hasattr(faiss, "StandardGpuResources") and faiss.get_num_gpus() > 0 else "cpu"
+    logger.info(
+        f"Semantic search executed with {backend} FAISS backend",
+        component="mcp",
+        operation="semantic_search",
+        context={"backend": backend, "query": query, "result_count": len(result)}
+    )
+
+    return {
+        "results": result,
+        "faiss_backend": backend,
+        "query": query,
+        "top_k": top_k
+    }
+
+
+# Simple test handler for debugging
+async def handle_test(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Test handler for debugging.
+    
+    Args:
+        args: Command arguments
+        
+    Returns:
+        Test result
+    """
+    return {
+        "message": "Test handler called successfully",
+        "args": args,
+        "handler_count": len(_command_handlers),
+        "available_handlers": list(_command_handlers.keys()),
+    }
 
 
 # Register default handlers

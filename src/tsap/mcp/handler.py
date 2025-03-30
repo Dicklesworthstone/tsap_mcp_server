@@ -25,6 +25,7 @@ from tsap.evolution.pattern_analyzer import analyze_pattern
 from tsap.composite.document_profiler import profile_documents
 import faiss
 from tsap.composite.semantic_search import SemanticSearchParams, get_operation
+from tsap.core.table_processor import process_table, get_table_processor
 
 from .protocol import (
     MCPRequest, MCPResponse, MCPCommandType,
@@ -34,6 +35,8 @@ from .protocol import (
 from .models import (
     RipgrepSearchParams,
     JqQueryParams,
+    TableProcessParams,
+    TableProcessResult,
 )
 
 
@@ -627,6 +630,52 @@ async def handle_sqlite_query(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
+@command_handler(MCPCommandType.TABLE_PROCESS)
+async def handle_process_table(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle table_process command.
+    
+    Args:
+        args: Command arguments matching TableProcessParams.
+        
+    Returns:
+        Command result as a dictionary.
+    """
+    logger.info(
+        "Handling table_process command",
+        component="mcp",
+        operation="table_process",
+        context={"args_keys": list(args.keys())} # Log keys for debugging
+    )
+    try:
+        # Validate/parse args using the Pydantic model
+        # This ensures args match the expected structure
+        params = TableProcessParams(**args)
+
+        # Get the singleton TableProcessor instance
+        processor = get_table_processor()
+
+        # Call the synchronous process method directly
+        # No need for run_in_executor if the method is not CPU-bound for long,
+        # or if the underlying I/O operations are already async (which they aren't here).
+        # If significant CPU work is done (complex transforms), executor might be needed.
+        # For now, assume direct call is acceptable for typical cases.
+        result: TableProcessResult = processor.process(params)
+
+        # Convert the result Pydantic model to a dictionary for the MCP response
+        # Ensure None values are included so client sees expected fields
+        return result.model_dump(exclude_none=False)
+    except Exception as e:
+        logger.error(
+            f"Error during table processing: {e}",
+            component="mcp",
+            operation="table_process",
+            exception=e
+        )
+        # Re-raise the exception so the main handle_request error handler
+        # can catch it and create a proper error response.
+        raise
+
+
 # Document Profiling Handler
 @command_handler(MCPCommandType.DOCUMENT_PROFILE)
 async def handle_document_profile(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -689,20 +738,13 @@ async def handle_semantic_search(args: Dict[str, Any]) -> Dict[str, Any]:
 
 # Simple test handler for debugging
 async def handle_test(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Test handler for debugging.
-    
-    Args:
-        args: Command arguments
-        
-    Returns:
-        Test result
-    """
-    return {
-        "message": "Test handler called successfully",
-        "args": args,
-        "handler_count": len(_command_handlers),
-        "available_handlers": list(_command_handlers.keys()),
-    }
+    """Handle test command."""
+    logger.info(
+        "Handling test command",
+        component="mcp",
+        operation="test_handler"
+    )
+    return {"message": "Test command successful", "received_args": args}
 
 
 # Register default handlers

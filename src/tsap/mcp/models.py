@@ -239,45 +239,65 @@ class PdfExtractResult(BaseModel):
     execution_time: float = Field(..., description="Execution time in seconds")
 
 
+class TableTransformParams(BaseModel):
+    """Parameters specific to data transformation within TableProcessor."""
+    filter_expr: Optional[str] = Field(None, description="Python expression to filter rows (e.g., 'row[\"value\"] > 10')")
+    columns: Optional[List[str]] = Field(None, description="List of columns to select/keep")
+    sort_by: Optional[str] = Field(None, description="Column name to sort by")
+    sort_desc: bool = Field(False, description="Sort in descending order")
+    computed_columns: Optional[Dict[str, str]] = Field(
+        None,
+        description="Dict {new_col: expr} to compute columns (e.g., {'total': 'row[\"a\"] + row[\"b\"]'})"
+    )
+
+
 class TableProcessParams(BaseModel):
     """Parameters for table processing."""
-    
-    table_data: Optional[Union[List[List[Any]], str]] = Field(
-        None, 
-        description="Table data to process (2D array or CSV string)"
-    )
-    file_path: Optional[str] = Field(None, description="Path to table file (CSV, TSV, Excel)")
+    # Input sources
+    file_path: Optional[str] = Field(None, description="Path to table file (CSV, TSV, Excel, Parquet, JSON)")
+    input_data: Optional[List[Dict[str, Any]]] = Field(None, description="Direct data input as list of dictionaries")
+
+    # Input format and options
+    input_format: Optional[str] = Field(None, description="Input format (e.g., csv, tsv, json). Inferred if None.")
     sheet_name: Optional[str] = Field(None, description="Sheet name for Excel files")
-    has_header: bool = Field(True, description="Whether the table has a header row")
-    delimiter: Optional[str] = Field(None, description="Delimiter for CSV/TSV data")
-    operations: List[Dict[str, Any]] = Field(
-        default_factory=list, 
-        description="Operations to perform on the table"
-    )
-    
+    delimiter: Optional[str] = Field(None, description="Delimiter for CSV/TSV files")
+    quotechar: Optional[str] = Field(None, description="Quote character for CSV/TSV files")
+    has_header: bool = Field(True, description="Input has a header row")
+    encoding: Optional[str] = Field(None, description="Input file encoding")
+    skiprows: Optional[int] = Field(None, description="Number of rows to skip at the beginning")
+
+    # Transformation options (nested model)
+    transform: Optional[TableTransformParams] = Field(None, description="Data transformation parameters")
+
+    # Analysis options
+    analyze: bool = Field(False, description="Perform data analysis")
+
+    # Output options
+    output_format: Optional[str] = Field(None, description="Output format (e.g., csv, json)")
+    output_path: Optional[str] = Field(None, description="Path for output file (temp file if None)")
+    json_orient: Optional[str] = Field("records", description="JSON output orientation")
+
+    # Response options
+    max_rows_return: Optional[int] = Field(1000, description="Max rows in response data (0 for all)")
+
     @root_validator(skip_on_failure=True)
-    def validate_input(cls, values):
-        """Validate that at least one input source is provided."""
-        table_data = values.get("table_data")
-        file_path = values.get("file_path")
-        
-        if table_data is None and file_path is None:
-            raise ValueError("Either table_data or file_path must be provided")
-            
+    def validate_input_source(cls, values):
+        if values.get("file_path") is None and values.get("input_data") is None:
+            raise ValueError("Either file_path or input_data must be provided")
         return values
 
 
 class TableProcessResult(BaseModel):
     """Result of a table processing operation."""
     
-    result: Union[List[List[Any]], List[Dict[str, Any]]] = Field(
-        ..., 
-        description="Processed table data"
-    )
-    columns: Optional[List[str]] = Field(None, description="Column names")
-    row_count: int = Field(0, description="Number of rows in result")
-    column_count: int = Field(0, description="Number of columns in result")
-    execution_time: float = Field(..., description="Execution time in seconds")
+    success: bool = Field(..., description="Whether the operation was successful")
+    result: List[Dict[str, Any]] = Field(default_factory=list, description="Processed table data (limited by max_rows_return)")
+    columns: List[str] = Field(default_factory=list, description="List of column names in the result")
+    row_count: int = Field(..., description="Total number of rows after processing")
+    column_count: int = Field(..., description="Number of columns in the result")
+    analysis: Optional[Dict[str, Any]] = Field(None, description="Analysis results if requested")
+    output_path: Optional[str] = Field(None, description="Path to the output file if generated")
+    execution_time: float = Field(..., description="Execution time for this specific call in seconds")
 
 
 # ==================== Composite Operations Models ====================

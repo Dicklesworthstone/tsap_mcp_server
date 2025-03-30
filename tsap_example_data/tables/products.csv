@@ -1,0 +1,9 @@
+ProductID,ProductName,Category,Price,Stock
+101,Laptop,Electronics,1200.50,50
+102,Mouse,Electronics,25.00,150
+103,Keyboard,Electronics,75.99,100
+201,Desk Chair,Furniture,150.00,75
+202,Office Desk,Furniture,320.75,30
+301,Coffee Mug,Home Goods,12.99,200
+302,Notebook,Stationery,5.50,500
+303,Pens (10-pack),Stationery,8.00,300 

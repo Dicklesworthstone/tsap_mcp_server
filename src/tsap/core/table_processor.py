@@ -8,12 +8,34 @@ data in tabular formats like CSV, Excel, etc.
 import os
 import csv
 import tempfile
-from typing import Dict, List, Optional, Union
+import time
+from typing import Dict, List, Optional
 
 import tsap.utils.logging as logging
 from tsap.core.base import BaseCoreTool, register_tool
 from tsap.utils.errors import TSAPError
-from tsap.mcp.models import TableProcessParams, TableProcessResult
+from tsap.mcp.models import TableProcessParams, TableProcessResult, TableTransformParams
+
+
+# Define a dictionary of safe built-ins to allow in eval expressions
+SAFE_BUILTINS = {
+    "float": float,
+    "int": int,
+    "str": str,
+    "round": round,
+    "len": len,
+    "abs": abs,
+    "max": max,
+    "min": min,
+    "sum": sum,
+    "any": any,
+    "all": all,
+    "bool": bool,
+    "dict": dict,
+    "list": list,
+    "tuple": tuple,
+    "set": set,
+}
 
 
 class TableProcessingError(TSAPError):
@@ -66,30 +88,26 @@ class TableProcessor(BaseCoreTool):
                 {"supported_formats": self._supported_formats}
             )
     
-    def _read_csv(self, file_path: str, params: Dict) -> List[Dict]:
+    def _read_csv(self, file_path: str, **kwargs) -> List[Dict]:
         """Read data from a CSV file."""
-        delimiter = params.get("delimiter", ",")
-        quotechar = params.get("quotechar", '"')
-        encoding = params.get("encoding", "utf-8")
-        has_header = params.get("has_header", True)
-        
+        if "delimiter" not in kwargs: # Only default if not provided
+             kwargs["delimiter"] = ","
+
+        logging.info(f"Reading CSV/TSV file: {file_path} with delimiter: '{kwargs.get('delimiter')}' encoding: {kwargs.get('encoding')}", component="table_processor")
+
         try:
-            with open(file_path, "r", encoding=encoding) as f:
-                # Read the CSV into a list of dictionaries
-                if has_header:
-                    reader = csv.DictReader(f, delimiter=delimiter, quotechar=quotechar)
+            with open(file_path, "r", encoding=kwargs.get("encoding", "utf-8")) as f:
+                if kwargs.get("has_header", True):
+                    reader = csv.DictReader(f, delimiter=kwargs.get("delimiter", ","), quotechar=kwargs.get("quotechar", '"'))
                     result = list(reader)
                 else:
-                    reader = csv.reader(f, delimiter=delimiter, quotechar=quotechar)
-                    result = []
-                    for row in reader:
-                        result.append(dict((str(i), v) for i, v in enumerate(row)))
-                
+                    reader = csv.reader(f, delimiter=kwargs.get("delimiter", ","), quotechar=kwargs.get("quotechar", '"'))
+                    result = [dict((str(i), v) for i, v in enumerate(row)) for row in reader]
                 return result
         except Exception as e:
             raise TableProcessingError(f"Error reading CSV file: {str(e)}", {"file": file_path})
     
-    def _read_pandas(self, file_path: str, format: str, params: Dict) -> List[Dict]:
+    def _read_pandas(self, file_path: str, format: str, **kwargs) -> List[Dict]:
         """Read data using pandas."""
         if not self._pandas_available:
             raise TableProcessingError(
@@ -99,24 +117,18 @@ class TableProcessor(BaseCoreTool):
         
         try:
             import pandas as pd
-            
-            # Set pandas options for reading
             read_kwargs = {}
-            if params.get("header") is not None:
-                read_kwargs["header"] = params.get("header")
-            
-            if params.get("sheet_name") and format in ["xlsx", "xls"]:
-                read_kwargs["sheet_name"] = params.get("sheet_name")
-            
-            if params.get("skiprows"):
-                read_kwargs["skiprows"] = params.get("skiprows")
-                
-            if params.get("encoding"):
-                read_kwargs["encoding"] = params.get("encoding")
-            
-            # Read based on format
+            if "header" in kwargs: 
+                read_kwargs["header"] = kwargs["header"]
+            if "sheet_name" in kwargs and format in ["xlsx", "xls"]: 
+                read_kwargs["sheet_name"] = kwargs["sheet_name"]
+            if "skiprows" in kwargs: 
+                read_kwargs["skiprows"] = kwargs["skiprows"]
+            if "encoding" in kwargs: 
+                read_kwargs["encoding"] = kwargs["encoding"]
+
             if format in ["csv", "tsv", "txt"]:
-                delimiter = params.get("delimiter", "," if format == "csv" else "\t")
+                delimiter = kwargs.get("delimiter", "," if format == "csv" else "\t")
                 df = pd.read_csv(file_path, delimiter=delimiter, **read_kwargs)
             elif format in ["xlsx", "xls"]:
                 df = pd.read_excel(file_path, **read_kwargs)
@@ -134,61 +146,87 @@ class TableProcessor(BaseCoreTool):
         except Exception as e:
             raise TableProcessingError(f"Error reading file with pandas: {str(e)}", {"file": file_path})
     
-    def _transform_data(self, data: List[Dict], params: Dict) -> List[Dict]:
+    def _transform_data(self, data: List[Dict], transform_options: Optional[TableTransformParams]) -> List[Dict]:
         """Apply transformations to the data."""
+        if not transform_options:
+             return data # No transformations requested
+
         result = data.copy()
-        
+        logging.debug(f"Applying transformations with options: {transform_options.model_dump(exclude_unset=True).keys()}", component="table_processor")
+
         # Filter rows
-        if params.get("filter_expr"):
-            filter_expr = params.get("filter_expr")
+        filter_expr = transform_options.filter_expr
+        if filter_expr:
             try:
-                # Basic expression evaluation for filtering
-                # Note: In a real implementation, this would need more robust safety measures
-                filter_func = eval(f"lambda row: {filter_expr}")
-                result = [row for row in result if filter_func(row)]
+                # Refined filter logic with row-by-row eval
+                logging.debug(f"Applying filter: {filter_expr}", component="table_processor")
+                filtered_result = []
+                for row in result:
+                    try:
+                         # Provide row and safe builtins in the eval context
+                         if eval(filter_expr, {"__builtins__": SAFE_BUILTINS}, {"row": row}):
+                              filtered_result.append(row)
+                    except Exception as eval_err:
+                         logging.warning(f"Filter eval error on row: {eval_err}", component="table_processor")
+                         continue # Skip row on error
+                logging.debug(f"Filter applied. Rows before: {len(result)}, Rows after: {len(filtered_result)}", component="table_processor")
+                result = filtered_result # Update result with filtered data
             except Exception as e:
+                logging.error(f"Error applying filter expression '{filter_expr}': {e}", component="table_processor")
                 raise TableProcessingError(f"Error in filter expression: {str(e)}")
-        
-        # Select columns
-        if params.get("columns"):
-            columns = params.get("columns")
-            result = [{k: row.get(k) for k in columns if k in row} for row in result]
-        
+
         # Sort data
-        if params.get("sort_by"):
-            sort_key = params.get("sort_by")
-            reverse = params.get("sort_desc", False)
+        sort_key = transform_options.sort_by
+        if sort_key:
+            reverse = transform_options.sort_desc
+            logging.debug(f"Sorting by '{sort_key}', descending={reverse}", component="table_processor")
             try:
-                result.sort(key=lambda x: x.get(sort_key), reverse=reverse)
+                def get_sort_key_func(row):
+                    val = row.get(sort_key)
+                    try:
+                        return float(val) if val is not None else float('-inf')
+                    except (ValueError, TypeError):
+                        return str(val)
+                result.sort(key=get_sort_key_func, reverse=reverse)
             except Exception as e:
+                logging.error(f"Error sorting data by key '{sort_key}': {e}", component="table_processor")
                 raise TableProcessingError(f"Error sorting data: {str(e)}")
-        
-        # Transform columns
-        if params.get("transformations"):
-            transformations = params.get("transformations")
-            for column, transform_expr in transformations.items():
-                try:
-                    transform_func = eval(f"lambda val, row: {transform_expr}")
-                    for row in result:
-                        if column in row:
-                            row[column] = transform_func(row.get(column), row)
-                except Exception as e:
-                    raise TableProcessingError(f"Error in column transformation: {str(e)}")
-        
+
         # Add computed columns
-        if params.get("computed_columns"):
-            for column, expr in params.get("computed_columns").items():
-                try:
-                    compute_func = eval(f"lambda row: {expr}")
-                    for row in result:
-                        row[column] = compute_func(row)
-                except Exception as e:
-                    raise TableProcessingError(f"Error in computed column: {str(e)}")
-        
+        computed_columns = transform_options.computed_columns
+        if computed_columns:
+            logging.debug(f"Adding computed columns: {list(computed_columns.keys())}", component="table_processor")
+            temp_result = []
+            # Use safe builtins for computed columns as well
+            safe_globals = {"__builtins__": SAFE_BUILTINS}
+            for row in result:
+                new_row = row.copy()
+                row_context = {"row": new_row} # Provide row context
+                for column, expr in computed_columns.items():
+                    try:
+                        new_row[column] = eval(expr, safe_globals, row_context)
+                    except Exception as e:
+                         logging.warning(f"Computed column '{column}' eval error: {e}", component="table_processor")
+                         new_row[column] = "ERROR"
+                temp_result.append(new_row)
+            result = temp_result # Update result with computed columns
+
+        # Select columns (apply LAST)
+        columns_to_select = transform_options.columns
+        if columns_to_select:
+            logging.debug(f"Selecting final columns: {columns_to_select}", component="table_processor")
+            final_result = []
+            for row in result:
+                selected_row = {k: row.get(k) for k in columns_to_select if k in row}
+                final_result.append(selected_row)
+            result = final_result # Update result with selected columns
+            logging.debug(f"Columns selected. First row keys: {list(result[0].keys()) if result else 'N/A'}", component="table_processor")
+
         return result
     
-    def _analyze_data(self, data: List[Dict], params: Dict) -> Dict:
+    def _analyze_data(self, data: List[Dict]) -> Dict:
         """Generate analytics for the data."""
+        logging.debug(f"Starting data analysis for {len(data)} rows.", component="table_processor")
         analysis = {
             "row_count": len(data),
             "column_stats": {},
@@ -202,6 +240,7 @@ class TableProcessor(BaseCoreTool):
         columns = set()
         for row in data:
             columns.update(row.keys())
+        logging.debug(f"Found columns for analysis: {columns}", component="table_processor")
         
         # Analyze each column
         for column in columns:
@@ -237,29 +276,35 @@ class TableProcessor(BaseCoreTool):
                         import statistics
                         col_stats["median"] = statistics.median(numeric_values)
                         col_stats["stdev"] = statistics.stdev(numeric_values)
-                    except (ImportError, statistics.StatisticsError):
-                        # Handle statistics module not available or insufficient data
+                    except ImportError:
+                        logging.warning("Could not import 'statistics' module for median/stdev calculation.", component="table_processor")
+                    except statistics.StatisticsError as stat_err:
+                        logging.warning(f"StatisticsError for column '{column}': {stat_err}", component="table_processor")
+                        # Handle statistics error (e.g., insufficient data for stdev)
                         pass
+                    except Exception as e:
+                        logging.error(f"Unexpected error during statistics calculation for column '{column}': {e}", component="table_processor")
             
             analysis["column_stats"][column] = col_stats
+            logging.debug(f"Calculated stats for column '{column}': {list(col_stats.keys())}", component="table_processor")
         
+        logging.debug(f"Finished data analysis. Result keys: {list(analysis.keys())}", component="table_processor")
         return analysis
     
-    def _write_output(self, data: List[Dict], format: str, params: Dict) -> str:
+    def _write_output(self, data: List[Dict], format: str, output_path: Optional[str], **kwargs) -> str:
         """Write processed data to a file and return its path."""
-        output_path = params.get("output_path")
-        
-        # Generate a temporary file if none specified
-        if not output_path:
+        # Determine output path
+        effective_output_path = output_path
+        if not effective_output_path:
             suffix = f".{format}"
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
-                output_path = temp.name
-                logging.debug(f"Created temporary output file: {output_path}", component="table_processor")
+                effective_output_path = temp.name
+                logging.debug(f"Created temporary output file: {effective_output_path}", component="table_processor")
         
         if format == "csv":
-            delimiter = params.get("delimiter", ",")
-            quotechar = params.get("quotechar", '"')
-            encoding = params.get("encoding", "utf-8")
+            delimiter = kwargs.get("delimiter", ",")
+            quotechar = kwargs.get("quotechar", '"')
+            encoding = kwargs.get("encoding", "utf-8")
             
             # Get all possible fieldnames from all rows
             fieldnames = set()
@@ -268,7 +313,7 @@ class TableProcessor(BaseCoreTool):
             fieldnames = sorted(fieldnames)
             
             try:
-                with open(output_path, "w", newline="", encoding=encoding) as f:
+                with open(effective_output_path, "w", newline="", encoding=encoding) as f:
                     writer = csv.DictWriter(
                         f, 
                         fieldnames=fieldnames,
@@ -292,82 +337,99 @@ class TableProcessor(BaseCoreTool):
                 df = pd.DataFrame(data)
                 
                 if format in ["xlsx", "xls"]:
-                    sheet_name = params.get("sheet_name", "Sheet1")
-                    df.to_excel(output_path, sheet_name=sheet_name, index=False)
+                    sheet_name = kwargs.get("sheet_name", "Sheet1")
+                    df.to_excel(effective_output_path, sheet_name=sheet_name, index=False)
                 elif format == "parquet":
-                    df.to_parquet(output_path, index=False)
+                    df.to_parquet(effective_output_path, index=False)
                 elif format == "json":
-                    orient = params.get("json_orient", "records")
-                    df.to_json(output_path, orient=orient)
+                    orient = kwargs.get("json_orient", "records")
+                    df.to_json(effective_output_path, orient=orient)
             except Exception as e:
                 raise TableProcessingError(f"Error writing to {format}: {str(e)}")
         else:
             raise TableProcessingError(f"Unsupported output format: {format}")
         
-        return output_path
+        logging.debug(f"Output file generated at: {effective_output_path}", component="table_processor") # Log path
+        return effective_output_path
     
-    def process(self, params: Union[Dict, TableProcessParams]) -> TableProcessResult:
-        """Process tabular data."""
-        if isinstance(params, dict):
-            # Convert to TableProcessParams if needed
-            # In a real implementation, this would need more thorough validation
-            pass
-        
-        with self._measure_execution_time():
-            input_path = params.get("input_path")
-            input_data = params.get("input_data")
-            input_format = params.get("input_format")
-            output_format = params.get("output_format")
-            transform_params = params.get("transform", {})
-            analyze = params.get("analyze", False)
-            
-            # Load data from either file or directly provided data
-            data = []
-            if input_path:
-                # Determine format if not explicitly specified
-                if not input_format:
-                    input_format = self._get_file_format(input_path)
-                
-                # Read data based on format
-                if input_format in ["csv", "tsv", "txt"]:
-                    data = self._read_csv(input_path, params)
-                else:
-                    # Use pandas for other formats
-                    data = self._read_pandas(input_path, input_format, params)
-            
-            elif input_data:
-                # Direct data input (assumed to be a list of dictionaries)
-                if isinstance(input_data, list):
-                    data = input_data
-                else:
-                    raise TableProcessingError("Input data must be a list of dictionaries")
+    def process(self, params: TableProcessParams) -> TableProcessResult:
+        """Process tabular data using Pydantic model for params."""
+        logging.info(f"--- Entering TableProcessor.process for file: {params.file_path} ---", component="table_processor")
+        start_time = time.perf_counter()
+
+        # Now params is guaranteed to be TableProcessParams type
+        # Extract parameters using dot notation
+        file_path = params.file_path
+        input_data = params.input_data
+        input_format = params.input_format
+        output_format = params.output_format
+        transform_params_model = params.transform # This is a TableTransformParams model or None
+        analyze = params.analyze
+
+        # Prepare kwargs for reading/writing based on params model fields
+        # EXCLUDE output_path here to prevent passing it twice later
+        read_write_kwargs = params.model_dump(exclude={"file_path", "input_data", "transform", "analyze", "max_rows_return", "output_path"}, exclude_unset=True)
+
+        # Load data
+        data = []
+        if file_path:
+            effective_input_format = input_format
+            if not effective_input_format:
+                effective_input_format = self._get_file_format(file_path)
+
+            if effective_input_format in ["csv", "tsv", "txt"]:
+                 # Pass specific options to _read_csv
+                 data = self._read_csv(file_path, **read_write_kwargs)
             else:
-                raise TableProcessingError("Either input_path or input_data must be provided")
-            
-            # Apply transformations
-            processed_data = self._transform_data(data, transform_params)
-            
-            # Generate analytics if requested
-            analysis_results = {}
-            if analyze:
-                analysis_results = self._analyze_data(processed_data, params)
-            
-            # Write output if format specified
-            output_path = None
-            if output_format:
-                output_path = self._write_output(processed_data, output_format, params)
-            
-            # Prepare result
-            result = TableProcessResult(
-                success=True,
-                data=processed_data[:params.get("max_rows_return", 1000)] if params.get("max_rows_return") else processed_data,
-                row_count=len(processed_data),
-                analysis=analysis_results,
-                output_path=output_path,
-                execution_time=self.get_statistics().get("execution_time", 0)
-            )
-            
-            return result
+                 # Pass specific options to _read_pandas
+                 data = self._read_pandas(file_path, effective_input_format, **read_write_kwargs)
+        elif input_data:
+            if isinstance(input_data, list):
+                data = input_data
+            else:
+                raise TableProcessingError("Input data must be a list of dictionaries")
+        else:
+             raise TableProcessingError("Either file_path or input_data must be provided")
+
+        # Apply transformations passing the TableTransformParams model
+        processed_data = self._transform_data(data, transform_params_model)
+
+        # Generate analytics if requested
+        analysis_results = {} if not analyze else self._analyze_data(processed_data)
+
+        # Write output if format specified
+        final_output_path = None
+        if output_format:
+            final_output_path = self._write_output(processed_data, output_format, params.output_path, **read_write_kwargs)
+            logging.debug(f"Output file generated at: {final_output_path}", component="table_processor")
+
+        # Calculate final shape
+        final_row_count = len(processed_data)
+        final_columns = list(processed_data[0].keys()) if final_row_count > 0 else []
+        final_column_count = len(final_columns)
+        logging.debug(f"Final data: {final_row_count} rows, {final_column_count} columns. Columns: {final_columns}", component="table_processor")
+
+        # Limit data for response
+        max_rows = params.max_rows_return if params.max_rows_return is not None else 1000 # Default limit
+        returned_data = processed_data[:max_rows]
+        logging.debug(f"Returning {len(returned_data)} rows in response.", component="table_processor")
+
+        end_time = time.perf_counter()
+        duration = end_time - start_time
+
+        # Prepare result
+        result = TableProcessResult(
+            success=True,
+            result=returned_data,
+            columns=final_columns,
+            row_count=final_row_count,
+            column_count=final_column_count,
+            analysis=analysis_results,
+            output_path=final_output_path,
+            execution_time=duration
+        )
+
+        return result
 
 
 @register_tool("table_processor")
@@ -376,7 +438,7 @@ def get_table_processor() -> TableProcessor:
     return TableProcessor()
 
 
-def process_table(params: Union[Dict, TableProcessParams]) -> TableProcessResult:
+def process_table(params: TableProcessParams) -> TableProcessResult:
     """Process a table with the specified parameters."""
     processor = get_table_processor()
     return processor.process(params)

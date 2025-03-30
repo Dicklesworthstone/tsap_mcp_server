@@ -9,6 +9,7 @@ import time
 import inspect
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Callable, Type, TypeVar, Generic
+from contextlib import contextmanager
 
 from tsap.utils.logging import logger
 from tsap.utils.errors import TSAPError
@@ -32,6 +33,22 @@ class BaseCoreTool(ABC):
             "execution_time": 0.0,
         }
     
+    @contextmanager
+    def _measure_execution_time(self):
+        """Context manager to measure execution time and update stats."""
+        start_time = time.perf_counter()
+        self.statistics["calls"] += 1
+        try:
+            yield
+        except Exception as e:
+            self.statistics["errors"] += 1
+            # Re-raise the exception after incrementing the error count
+            raise e
+        finally:
+            end_time = time.perf_counter()
+            duration = end_time - start_time
+            self.statistics["execution_time"] += duration
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get tool statistics.
         

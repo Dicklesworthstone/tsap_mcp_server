@@ -1,0 +1,26 @@
+[
+  {
+    "sensorId": "TEMP01",
+    "timestamp": "2023-11-15T10:00:00Z",
+    "reading": 22.5,
+    "unit": "Celsius"
+  },
+  {
+    "sensorId": "HUM01",
+    "timestamp": "2023-11-15T10:00:00Z",
+    "reading": 45.2,
+    "unit": "Percent"
+  },
+  {
+    "sensorId": "TEMP01",
+    "timestamp": "2023-11-15T10:05:00Z",
+    "reading": 22.7,
+    "unit": "Celsius"
+  },
+  {
+    "sensorId": "PRES01",
+    "timestamp": "2023-11-15T10:05:00Z",
+    "reading": 1012.1,
+    "unit": "hPa"
+  }
+] 

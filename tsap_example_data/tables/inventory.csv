@@ -1,0 +1,7 @@
+Location,ItemCode,Quantity,LastUpdated
+Warehouse A,101,35,2023-11-14
+Warehouse B,102,120,2023-11-15
+Warehouse A,103,80,2023-11-14
+Storefront,101,15,2023-11-15
+Storefront,102,30,2023-11-15
+Warehouse B,201,60,2023-11-13 

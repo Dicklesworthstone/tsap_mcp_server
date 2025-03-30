@@ -1,0 +1,7 @@
+REGION,SALESPERSON,QUARTER,SALES_AMOUNT
+North,Alice,Q1,55000
+North,Bob,Q1,48000
+South,Charlie,Q1,62000
+North,Alice,Q2,58000
+South,Charlie,Q2,65000
+South,David,Q2,51000 

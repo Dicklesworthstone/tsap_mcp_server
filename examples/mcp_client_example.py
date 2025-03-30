@@ -289,6 +289,30 @@ class MCPClient:
         # The handler expects the command name defined in MCPCommandType
         return await self.send_request("jq_query", args)
 
+    async def process_table(self, **kwargs) -> Dict[str, Any]:
+        """Process tabular data using the TableProcessor tool.
+
+        Args:
+            **kwargs: Parameters for the table processor, matching TableProcessParams.
+                Common examples include:
+                - input_path (str): Path to the input file.
+                - input_data (List[Dict]): Direct data input.
+                - input_format (str): e.g., 'csv', 'tsv', 'json'.
+                - analyze (bool): Whether to perform analysis.
+                - transform (Dict): Transformation parameters (filter_expr, columns, etc.).
+                - output_format (str): e.g., 'csv', 'json'.
+                - output_path (str): Path for the output file.
+                - max_rows_return (int): Max rows to include in the response data.
+                - (and other specific format/reading options)
+
+        Returns:
+            Table processing results.
+        """
+        # The kwargs directly match the expected 'args' for the server command
+        args = kwargs
+        # Use the correct command name expected by the server handler
+        return await self.send_request("table_process", args)
+
 
 async def main():
     """Run example MCP client requests."""

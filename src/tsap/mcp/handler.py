@@ -37,6 +37,8 @@ from .models import (
     JqQueryParams,
     TableProcessParams,
     TableProcessResult,
+    PdfExtractParams,
+    PdfExtractResult,
 )
 
 
@@ -328,6 +330,8 @@ def initialize_handlers():
     register_command_handler(MCPCommandType.JQ_QUERY, handle_jq_query)
     register_command_handler(MCPCommandType.AWK_PROCESS, handle_awk_process)
     register_command_handler(MCPCommandType.SQLITE_QUERY, handle_sqlite_query)
+    register_command_handler(MCPCommandType.PDF_EXTRACT, handle_pdf_extract)
+    register_command_handler(MCPCommandType.TABLE_PROCESS, handle_table_process)
     
     # Register composite operations
     register_command_handler(MCPCommandType.PARALLEL_SEARCH, handle_parallel_search)
@@ -630,8 +634,56 @@ async def handle_sqlite_query(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
+@command_handler(MCPCommandType.PDF_EXTRACT)
+async def handle_pdf_extract(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle pdf_extract command.
+
+    Args:
+        args: Command arguments
+
+    Returns:
+        Command result
+    """
+    logger.info(
+        "Handling pdf_extract command",
+        component="mcp",
+        operation="pdf_extract"
+    )
+    
+    try:
+        # Import the core extraction function and models
+        from tsap.core.pdf_extractor import extract_pdf_text, extract_pdf_metadata # We might need the full PdfExtractor class or its main method
+        from tsap.core.pdf_extractor import get_pdf_extractor # Get the registered tool instance
+        from .models import PdfExtractParams, PdfExtractResult # Import Pydantic models
+
+        # Validate arguments using the Pydantic model
+        params = PdfExtractParams(**args)
+        
+        # Get the PdfExtractor tool instance
+        extractor = get_pdf_extractor()
+        
+        # Call the extractor's main processing method
+        # Assuming the PdfExtractor class has an `extract_text` or similar method
+        # that takes PdfExtractParams and returns PdfExtractResult
+        # Adjust the method call based on the actual PdfExtractor implementation
+        result: PdfExtractResult = await extractor.extract_text(params)
+        
+        # Convert result to serializable dictionary
+        return result.model_dump()
+    except Exception as e:
+        logger.error(
+            f"Error handling PDF Extract query: {str(e)}",
+            component="mcp",
+            operation="handle_pdf_extract",
+            exception=e,
+            context=args
+        )
+        # Re-raise to be caught by the main request handler
+        raise
+
+
 @command_handler(MCPCommandType.TABLE_PROCESS)
-async def handle_process_table(args: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_table_process(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle table_process command.
     
     Args:

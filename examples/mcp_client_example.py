@@ -9,12 +9,14 @@ import asyncio
 import json
 import httpx
 import uuid
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 
 from rich import print as rich_print
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
+
+from tsap.utils.errors import TSAPError
 
 # Base MCP server URL - default is the local server
 SERVER_URL = "http://localhost:8021"
@@ -288,6 +290,51 @@ class MCPClient:
         # Send the request
         # The handler expects the command name defined in MCPCommandType
         return await self.send_request("jq_query", args)
+
+    async def pdf_extract(
+        self,
+        pdf_path: str,
+        pages: Optional[Union[List[int], str]] = None,
+        extract_text: bool = True,
+        extract_tables: bool = False,
+        extract_images: bool = False,
+        extract_metadata: bool = False,
+        password: Optional[str] = None,
+        **kwargs # Allow for future expansion
+    ) -> Dict[str, Any]:
+        """Extract data from a PDF file using the PdfExtractor tool.
+
+        Args:
+            pdf_path: Path to the PDF file to process.
+            pages: Optional specification of pages to extract (e.g., "1-5", [1, 3, 5], "all"). Defaults to all if not specified for text/images/tables.
+            extract_text: Whether to extract text content.
+            extract_tables: Whether to attempt table extraction.
+            extract_images: Whether to extract information about images.
+            extract_metadata: Whether to extract PDF metadata.
+            password: Optional password for encrypted PDFs.
+            **kwargs: Additional parameters (currently unused).
+
+        Returns:
+            PDF extraction results.
+        """
+        args = {
+            "pdf_path": pdf_path,
+            "extract_text": extract_text,
+            "extract_tables": extract_tables,
+            "extract_images": extract_images,
+            "extract_metadata": extract_metadata,
+        }
+        # Only include optional args if they are provided (not None/False)
+        if pages is not None:
+            args["pages"] = pages
+        if password is not None:
+            args["password"] = password
+
+        # Add any unexpected kwargs (for forward compatibility)
+        args.update(kwargs)
+
+        # Send the request
+        return await self.send_request("pdf_extract", args)
 
     async def process_table(self, **kwargs) -> Dict[str, Any]:
         """Process tabular data using the TableProcessor tool.

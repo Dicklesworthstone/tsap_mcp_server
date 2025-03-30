@@ -6,8 +6,7 @@ with support for complex layouts, tables, and structured content extraction.
 """
 import os
 import asyncio
-import tempfile
-from typing import Dict, List, Any, Optional, Tuple, BinaryIO, Union
+from typing import Dict, List, Any, Optional, Union
 
 try:
     import fitz  # PyMuPDF
@@ -17,13 +16,12 @@ except ImportError:
 try:
     from pdfminer.high_level import extract_text as pdfminer_extract_text
     from pdfminer.high_level import extract_pages
-    from pdfminer.layout import LAParams, LTTextContainer, LTTextBox, LTTextLine, LTPage
+    from pdfminer.layout import LTTextContainer, LTPage
 except ImportError:
     pdfminer_extract_text = None
     extract_pages = None
 
 from tsap.utils.logging import logger
-from tsap.config import get_config
 from tsap.performance_mode import get_parameter
 from tsap.core.base import BaseCoreTool, register_tool
 from tsap.mcp.models import PdfExtractParams, PdfExtractResult
@@ -357,10 +355,10 @@ class PdfExtractor(BaseCoreTool):
                 "file_size": os.path.getsize(pdf_path),
                 "format": "PDF " + metadata.get("format", ""),
                 "encryption": doc.is_encrypted,
-                "has_xfa": doc.xfa,
-                "has_xml": doc.xml,
+                "has_xfa": getattr(doc, 'xfa', False),
+                "has_xml": getattr(doc, 'is_xml', False),
                 "is_reflowable": doc.is_reflowable,
-                "form_fields": doc.has_form_fields,
+                "form_fields": getattr(doc, 'has_form_fields', False),
                 "embedded_files": len(doc.embfile_names()),
             }
             

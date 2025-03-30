@@ -198,6 +198,97 @@ class MCPClient:
         # Send the request using the specified mode
         return await self.send_request("semantic_search", args, mode=mode)
 
+    async def awk_process(
+        self,
+        script: str,
+        input_text: Optional[str] = None,
+        input_files: Optional[List[str]] = None,
+        field_separator: Optional[str] = None,
+        output_field_separator: Optional[str] = None,
+        variables: Optional[Dict[str, str]] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Process text using AWK.
+
+        Args:
+            script: The AWK script to execute.
+            input_text: Optional string input to process via stdin.
+            input_files: Optional list of file paths to process.
+            field_separator: Optional input field separator (-F).
+            output_field_separator: Optional output field separator (OFS).
+            variables: Optional dictionary of variables to pass (-v).
+            **kwargs: Additional parameters (currently unused but for future).
+
+        Returns:
+            AWK processing results.
+        """
+        args = {
+            "script": script,
+        }
+        if input_text is not None:
+            args["input_text"] = input_text
+        if input_files is not None:
+            args["input_files"] = input_files
+        if field_separator is not None:
+            args["field_separator"] = field_separator
+        if output_field_separator is not None:
+            args["output_field_separator"] = output_field_separator
+        if variables is not None:
+            args["variables"] = variables
+
+        # Add any remaining keyword arguments (if needed in future)
+        # for key, value in kwargs.items():
+        #     args[key] = value
+
+        # Send the request
+        return await self.send_request("awk_process", args)
+
+    async def jq_process(
+        self,
+        query: str,
+        input_json: Optional[str] = None,
+        input_files: Optional[List[str]] = None,
+        raw_output: bool = False,
+        compact_output: bool = False,
+        monochrome_output: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Query JSON data using JQ.
+
+        Args:
+            query: The JQ query string.
+            input_json: Optional JSON string input to process via stdin.
+            input_files: Optional list of file paths containing JSON data.
+            raw_output: If True, output raw strings (-r).
+            compact_output: If True, output compact JSON (-c).
+            monochrome_output: If True, disable colorized output (-M).
+            **kwargs: Additional parameters (currently unused).
+
+        Returns:
+            JQ processing results.
+        """
+        args = {
+            "query": query,
+        }
+        if input_json is not None:
+            args["input_json"] = input_json
+        if input_files is not None:
+            args["input_files"] = input_files
+        if raw_output:
+            args["raw_output"] = raw_output
+        if compact_output:
+            args["compact_output"] = compact_output
+        if monochrome_output:
+            args["monochrome_output"] = monochrome_output
+
+        # Add any remaining keyword arguments (if needed in future)
+        # for key, value in kwargs.items():
+        #     args[key] = value
+
+        # Send the request
+        # The handler expects the command name defined in MCPCommandType
+        return await self.send_request("jq_query", args)
+
 
 async def main():
     """Run example MCP client requests."""

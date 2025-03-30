@@ -33,6 +33,7 @@ from .protocol import (
 
 from .models import (
     RipgrepSearchParams,
+    JqQueryParams,
 )
 
 
@@ -386,7 +387,7 @@ async def handle_ripgrep_search(args: Dict[str, Any]) -> Dict[str, Any]:
         
     if "invert_match" not in adapted_args:
         adapted_args["invert_match"] = False
-        
+    
     # Create params object
     params = RipgrepSearchParams(**adapted_args)
     
@@ -413,11 +414,25 @@ async def handle_jq_query(args: Dict[str, Any]) -> Dict[str, Any]:
         operation="jq_query"
     )
     
-    # Execute jq query
-    result = await jq_query(args)
-    
-    # Convert to serializable form
-    return result.model_dump()
+    try:
+        # Validate args into the Pydantic model
+        params = JqQueryParams(**args)
+        
+        # Execute jq query using the validated params object
+        result = await jq_query(params)
+        
+        # Convert to serializable form
+        return result.model_dump()
+    except Exception as e:
+        logger.error(
+            f"Error handling JQ query: {str(e)}",
+            component="mcp",
+            operation="handle_jq_query",
+            exception=e,
+            context=args
+        )
+        # Re-raise to be caught by the main request handler
+        raise
 
 
 @command_handler(MCPCommandType.AWK_PROCESS)

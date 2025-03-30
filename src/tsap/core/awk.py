@@ -8,7 +8,7 @@ import os
 import shutil
 import asyncio
 import subprocess
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from tsap.utils.logging import logger
 from tsap.config import get_config
@@ -139,137 +139,197 @@ class AwkTool(BaseCoreTool):
             
         return cmd
     
-    async def process(self, params: AwkProcessParams) -> AwkProcessResult:
+    async def _run_process(
+        self, cmd: List[str], timeout: float, input_data: Optional[str] = None
+    ) -> Tuple[int, str, str]:
+        """Run the AWK process.
+
+        Args:
+            cmd: The command list to execute.
+            timeout: Timeout in seconds.
+            input_data: Optional string data to pass to stdin.
+
+        Returns:
+            Tuple of (returncode, stdout, stderr)
+        """
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=10 * 1024 * 1024,  # 10 MB buffer
+        )
+
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                process.communicate(input=input_data.encode() if input_data else None),
+                timeout=timeout,
+            )
+            returncode = process.returncode
+        except asyncio.TimeoutError:
+            try:
+                process.terminate()
+                await asyncio.wait_for(process.wait(), timeout=1.0) # Allow time for termination
+            except asyncio.TimeoutError:
+                process.kill()
+            await process.wait() # Ensure process is cleaned up
+            raise asyncio.TimeoutError # Re-raise the original timeout
+
+        stdout = stdout_bytes.decode("utf-8", errors="replace")
+        stderr = stderr_bytes.decode("utf-8", errors="replace")
+
+        return returncode, stdout, stderr
+
+    async def process(self, params: dict) -> AwkProcessResult:
         """Process text using AWK.
         
         Args:
-            params: Process parameters
+            params: Process parameters as a dictionary
             
         Returns:
             Process results
         """
-        async with self._measure_execution_time():
-            start_time = asyncio.get_event_loop().time()
+        # Convert dict to AwkProcessParams object
+        try:
+            awk_params = AwkProcessParams(**params)
+        except Exception as e:
+            logger.error(
+                f"Failed to parse AWK parameters: {str(e)}",
+                component="core",
+                operation="awk_process",
+                exception=e,
+                context={"raw_params": params}
+            )
+            # Return an error result if parsing fails
+            return AwkProcessResult(
+                output=f"Error parsing parameters: {str(e)}",
+                exit_code=1,
+                command="N/A (Parameter Parsing Error)",
+                execution_time=0
+            )
             
-            # Build the command
-            cmd = self._build_command(params)
-            cmd_str = " ".join(str(arg) for arg in cmd)
+        start_time = asyncio.get_event_loop().time()
+        
+        # Build the command using the AwkProcessParams object
+        cmd = self._build_command(awk_params)
+        cmd_str = " ".join(str(arg) for arg in cmd)
+        
+        # Get timeout from performance mode
+        timeout = get_parameter("timeout", 30.0)
+        
+        # Log the operation
+        logger.info(
+            "Executing AWK process",
+            component="core",
+            operation="awk_process",
+            context={
+                "script": awk_params.script,
+                "files": awk_params.input_files,
+                "command": cmd_str,
+            }
+        )
+        
+        try:
+            # Create a temporary file for input if needed
+            input_data = None
+            tempfile_path = None
             
-            # Get timeout from performance mode
-            timeout = get_parameter("timeout", 30.0)
+            # Use awk_params for checks and access
+            if awk_params.input_text and not awk_params.input_files:
+                # Input provided as string, use stdin
+                input_data = awk_params.input_text
+                
+                # Log the input size
+                logger.debug(
+                    f"Using input text from string ({len(input_data)} chars)",
+                    component="core",
+                    operation="awk_process"
+                )
             
-            # Log the operation
-            logger.info(
-                "Executing AWK process",
+            # Execute the command
+            returncode, stdout, stderr = await self._run_process(
+                cmd=cmd,
+                timeout=timeout,
+                input_data=input_data,
+            )
+            
+            # Calculate execution time
+            execution_time = asyncio.get_event_loop().time() - start_time
+            
+            # Log the result
+            if returncode == 0:
+                logger.success(
+                    "AWK process completed",
+                    component="core",
+                    operation="awk_process",
+                    context={
+                        "execution_time": execution_time,
+                        "output_size": len(stdout),
+                    }
+                )
+            else:
+                logger.error(
+                    f"AWK process failed (exit code {returncode}): {stderr}",
+                    component="core",
+                    operation="awk_process",
+                    context={
+                        "execution_time": execution_time,
+                        "error": stderr,
+                    }
+                )
+            
+            # Create and return the result
+            return AwkProcessResult(
+                output=stdout,
+                exit_code=returncode,
+                command=cmd_str,
+                execution_time=execution_time,
+            )
+            
+        except asyncio.TimeoutError:
+            # Log the timeout
+            logger.warning(
+                f"AWK process timed out after {timeout}s",
                 component="core",
                 operation="awk_process",
                 context={
-                    "script": params.script,
-                    "files": params.input_files,
-                    "command": cmd_str,
+                    "script": awk_params.script,
+                    "timeout": timeout,
                 }
             )
             
-            try:
-                # Create a temporary file for input if needed
-                input_data = None
-                tempfile_path = None
-                
-                if params.input_text and not params.input_files:
-                    # Input provided as string, use stdin
-                    input_data = params.input_text
-                    
-                    # Log the input size
-                    logger.debug(
-                        f"Using input text from string ({len(input_data)} chars)",
-                        component="core",
-                        operation="awk_process"
-                    )
-                
-                # Execute the command
-                returncode, stdout, stderr = await self._run_process(
-                    cmd=cmd,
-                    timeout=timeout,
-                    input_data=input_data,
-                )
-                
-                # Calculate execution time
-                execution_time = asyncio.get_event_loop().time() - start_time
-                
-                # Log the result
-                if returncode == 0:
-                    logger.success(
-                        "AWK process completed",
-                        component="core",
-                        operation="awk_process",
-                        context={
-                            "execution_time": execution_time,
-                            "output_size": len(stdout),
-                        }
-                    )
-                else:
-                    logger.error(
-                        f"AWK process failed (exit code {returncode}): {stderr}",
-                        component="core",
-                        operation="awk_process",
-                        context={
-                            "execution_time": execution_time,
-                            "error": stderr,
-                        }
-                    )
-                
-                # Create and return the result
-                return AwkProcessResult(
-                    output=stdout,
-                    exit_code=returncode,
-                    command=cmd_str,
-                    execution_time=execution_time,
-                )
-                
-            except asyncio.TimeoutError:
-                # Log the timeout
-                logger.warning(
-                    f"AWK process timed out after {timeout}s",
-                    component="core",
-                    operation="awk_process",
-                    context={
-                        "script": params.script,
-                        "timeout": timeout,
-                    }
-                )
-                
-                # Create and return a timeout result
-                return AwkProcessResult(
-                    output=f"Error: Process timed out after {timeout} seconds",
-                    exit_code=124,  # Standard timeout exit code
-                    command=cmd_str,
-                    execution_time=timeout,
-                )
-                
-            except Exception as e:
-                # Log the error
-                logger.error(
-                    f"AWK process failed: {str(e)}",
-                    component="core",
-                    operation="awk_process",
-                    exception=e,
-                    context={
-                        "script": params.script,
-                    }
-                )
-                
-                # Create and return an error result
-                return AwkProcessResult(
-                    output=f"Error: {str(e)}",
-                    exit_code=1,
-                    command=cmd_str,
-                    execution_time=asyncio.get_event_loop().time() - start_time,
-                )
-                
-            finally:
-                # Clean up temporary file if created
-                if tempfile_path and os.path.exists(tempfile_path):
-                    os.unlink(tempfile_path)
+            # Create and return a timeout result
+            return AwkProcessResult(
+                output=f"Error: Process timed out after {timeout} seconds",
+                exit_code=124,  # Standard timeout exit code
+                command=cmd_str,
+                execution_time=timeout,
+            )
+            
+        except Exception as e:
+            # Log the error
+            logger.error(
+                f"AWK process failed: {str(e)}",
+                component="core",
+                operation="awk_process",
+                exception=e,
+                context={
+                    "script": awk_params.script,
+                }
+            )
+            
+            # Create and return an error result
+            return AwkProcessResult(
+                output=f"Error: {str(e)}",
+                exit_code=1,
+                command=cmd_str,
+                execution_time=asyncio.get_event_loop().time() - start_time,
+            )
+            
+        finally:
+            # Clean up temporary file if created
+            if tempfile_path and os.path.exists(tempfile_path):
+                os.unlink(tempfile_path)
 
 
 # Create a singleton instance
@@ -299,7 +359,7 @@ def get_awk_tool() -> AwkTool:
     return _awk_tool
 
 
-async def awk_process(params: AwkProcessParams) -> AwkProcessResult:
+async def awk_process(params: dict) -> AwkProcessResult:
     """Process text using AWK.
     
     This is a convenience function that uses the singleton AwkTool instance.

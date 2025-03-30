@@ -173,132 +173,147 @@ class JqTool(BaseCoreTool):
         Returns:
             Query results
         """
-        async with self._measure_execution_time():
-            start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_event_loop().time()
+        
+        # Build the command
+        cmd = self._build_command(params)
+        cmd_str = " ".join(str(arg) for arg in cmd)
+        
+        # Get timeout from performance mode
+        timeout = get_parameter("timeout", 30.0)
+        
+        # Log the operation
+        logger.info(
+            f"Executing jq query: {params.query}",
+            component="core",
+            operation="jq_query",
+            context={
+                "query": params.query,
+                "files": params.input_files,
+                "command": cmd_str,
+            }
+        )
+        
+        try:
+            # Determine input for the process
+            process_input = None
+            if params.input_json and not params.input_files:
+                process_input = params.input_json.encode()
+                logger.debug(
+                    f"Using input JSON from string ({len(process_input)} bytes)",
+                    component="core",
+                    operation="jq_query"
+                )
             
-            # Build the command
-            cmd = self._build_command(params)
-            cmd_str = " ".join(str(arg) for arg in cmd)
+            # Execute the command using asyncio.create_subprocess_exec
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE if process_input else None,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                limit=10 * 1024 * 1024,  # 10 MB buffer like ripgrep
+            )
             
-            # Get timeout from performance mode
-            timeout = get_parameter("timeout", 30.0)
+            # Wait for the process to complete with timeout
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                process.communicate(input=process_input),
+                timeout=timeout
+            )
             
-            # Log the operation
-            logger.info(
-                f"Executing jq query: {params.query}",
+            stdout = stdout_bytes.decode("utf-8", errors="replace")
+            stderr = stderr_bytes.decode("utf-8", errors="replace")
+            returncode = process.returncode
+
+            # Check for errors (jq returns non-zero on parse/query errors)
+            if returncode != 0:
+                # Use stderr as the primary error message if available
+                error_msg = stderr.strip() or f"jq query failed with exit code {returncode}"
+                raise RuntimeError(error_msg)
+                
+            # Parse the output
+            parsed_output = await self._parse_output(stdout, params.raw_output)
+            
+            # Calculate execution time
+            execution_time = asyncio.get_event_loop().time() - start_time
+            
+            # Determine if output was successfully parsed as JSON
+            parsed_as_json = not isinstance(parsed_output, str) or params.raw_output
+            
+            # Log the result
+            logger.success(
+                "jq query completed",
+                component="core",
+                operation="jq_query",
+                context={
+                    "execution_time": execution_time,
+                    "parsed_as_json": parsed_as_json,
+                }
+            )
+            
+            # Create and return the result
+            return JqQueryResult(
+                output=parsed_output,
+                parsed=parsed_as_json,
+                exit_code=returncode,
+                command=cmd_str,
+                execution_time=execution_time,
+            )
+            
+        except asyncio.TimeoutError:
+            # Log the timeout
+            logger.warning(
+                f"jq query timed out after {timeout}s",
                 component="core",
                 operation="jq_query",
                 context={
                     "query": params.query,
-                    "files": params.input_files,
-                    "command": cmd_str,
+                    "timeout": timeout,
                 }
             )
             
-            try:
-                # Create a temporary file for input if needed
-                input_data = None
-                tempfile_path = None
-                
-                if params.input_json and not params.input_files:
-                    # Input provided as string, use stdin
-                    input_data = params.input_json
-                    
-                    # Log the input size
-                    logger.debug(
-                        f"Using input JSON from string ({len(input_data)} bytes)",
-                        component="core",
-                        operation="jq_query"
-                    )
-                
-                # Execute the command
-                returncode, stdout, stderr = await self._run_process(
-                    cmd=cmd,
-                    timeout=timeout,
-                    input_data=input_data,
-                )
-                
-                # Check for errors
-                if returncode != 0:
-                    raise RuntimeError(
-                        f"jq query failed (exit code {returncode}): {stderr}"
-                    )
-                    
-                # Parse the output
-                parsed_output = await self._parse_output(stdout, params.raw_output)
-                
-                # Calculate execution time
-                execution_time = asyncio.get_event_loop().time() - start_time
-                
-                # Determine if output was successfully parsed as JSON
-                parsed_as_json = not isinstance(parsed_output, str) or params.raw_output
-                
-                # Log the result
-                logger.success(
-                    "jq query completed",
-                    component="core",
-                    operation="jq_query",
-                    context={
-                        "execution_time": execution_time,
-                        "parsed_as_json": parsed_as_json,
-                    }
-                )
-                
-                # Create and return the result
-                return JqQueryResult(
-                    output=parsed_output,
-                    parsed=parsed_as_json,
-                    exit_code=returncode,
-                    command=cmd_str,
-                    execution_time=execution_time,
-                )
-                
-            except asyncio.TimeoutError:
-                # Log the timeout
-                logger.warning(
-                    f"jq query timed out after {timeout}s",
-                    component="core",
-                    operation="jq_query",
-                    context={
-                        "query": params.query,
-                        "timeout": timeout,
-                    }
-                )
-                
-                # Create and return a timeout result
-                return JqQueryResult(
-                    output="Error: Query timed out",
-                    parsed=False,
-                    exit_code=124,  # Standard timeout exit code
-                    command=cmd_str,
-                    execution_time=timeout,
-                )
-                
-            except Exception as e:
-                # Log the error
-                logger.error(
-                    f"jq query failed: {str(e)}",
-                    component="core",
-                    operation="jq_query",
-                    exception=e,
-                    context={
-                        "query": params.query,
-                    }
-                )
-                
-                # Create and return an error result
-                return JqQueryResult(
-                    output=f"Error: {str(e)}",
-                    parsed=False,
-                    exit_code=1,
-                    command=cmd_str,
-                    execution_time=asyncio.get_event_loop().time() - start_time,
-                )
-                
-            finally:
-                # Clean up temporary file if created
-                if tempfile_path and os.path.exists(tempfile_path):
-                    os.unlink(tempfile_path)
+            # Create and return a timeout result
+            return JqQueryResult(
+                output="Error: Query timed out",
+                parsed=False,
+                exit_code=124,  # Standard timeout exit code
+                command=cmd_str,
+                execution_time=timeout,
+            )
+            
+        except Exception as e:
+            # Log the error
+            logger.error(
+                f"jq query failed: {str(e)}",
+                component="core",
+                operation="jq_query",
+                exception=e,
+                context={
+                    "query": params.query,
+                }
+            )
+            
+            # Create and return an error result
+            # Use stderr if available from a RuntimeError, otherwise use exception string
+            error_output = str(e) 
+            exit_code = 1 # Default error code
+            # Attempt to get a more specific exit code if it's a runtime error from the process
+            if isinstance(e, RuntimeError) and "exit code" in error_output:
+                 try:
+                     # Simple extraction, might need refinement
+                     code_str = error_output.split("exit code ")[-1].split(")")[0]
+                     exit_code = int(code_str)
+                 except (ValueError, IndexError):
+                     pass # Keep exit_code as 1
+
+            return JqQueryResult(
+                output=error_output, 
+                parsed=False,
+                exit_code=exit_code, 
+                command=cmd_str,
+                execution_time=asyncio.get_event_loop().time() - start_time,
+            )
+            
+        # Removed finally block as tempfile logic was not used/implemented here
 
 
 # Create a singleton instance

@@ -1,0 +1,46 @@
+{
+  "id": "project-alpha",
+  "name": "Project Alpha",
+  "metadata": {
+    "owner": "admin",
+    "created": "2023-10-01",
+    "tags": ["important", "web", "frontend"]
+  },
+  "components": [
+    {
+      "id": "comp-001",
+      "type": "database",
+      "details": {
+        "engine": "PostgreSQL",
+        "version": "15.3",
+        "size_gb": 50,
+        "replication": true
+      }
+    },
+    {
+      "id": "comp-002",
+      "type": "server",
+      "details": {
+        "os": "Ubuntu",
+        "version": "22.04",
+        "instances": [
+          {"id": "instance-a", "ip": "10.0.1.10", "status": "running"},
+          {"id": "instance-b", "ip": "10.0.1.11", "status": "stopped"}
+        ]
+      }
+    },
+    {
+      "id": "comp-003",
+      "type": "api",
+      "details": {
+        "language": "Python",
+        "framework": "FastAPI",
+        "endpoints": [
+          {"/users": "GET"},
+          {"/items": ["GET", "POST"]}
+        ]
+      }
+    }
+  ],
+  "status": "active"
+} 

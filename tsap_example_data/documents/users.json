@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "username": "alice",
+    "email": "alice@example.com",
+    "role": "admin",
+    "active": true,
+    "profile": {
+      "join_date": "2023-01-10",
+      "last_login": "2024-03-28T10:00:00Z"
+    },
+    "tags": ["dev", "team-lead"]
+  },
+  {
+    "id": 2,
+    "username": "bob",
+    "email": "bob@example.com",
+    "role": "editor",
+    "active": true,
+    "profile": {
+      "join_date": "2023-02-15",
+      "last_login": "2024-03-29T08:30:00Z"
+    },
+    "tags": ["content", "marketing"]
+  },
+  {
+    "id": 3,
+    "username": "charlie",
+    "email": "charlie@example.com",
+    "role": "viewer",
+    "active": false,
+    "profile": {
+      "join_date": "2023-05-20",
+      "last_login": "2024-01-15T12:00:00Z"
+    },
+    "tags": ["external"]
+  },
+  {
+    "id": 4,
+    "username": "dave",
+    "email": "dave@example.com",
+    "role": "editor",
+    "active": true,
+    "profile": {
+      "join_date": "2023-06-01",
+      "last_login": "2024-03-29T09:45:00Z"
+    },
+    "tags": ["dev", "backend"]
+  }
+] 

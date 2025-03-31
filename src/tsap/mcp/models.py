@@ -6,7 +6,7 @@ and their parameters and results.
 """
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, root_validator, model_validator
 
 
 # ==================== Core Tools Models ====================
@@ -164,18 +164,22 @@ class HtmlProcessParams(BaseModel):
     extract_links: bool = Field(False, description="Extract links from HTML")
     extract_text: bool = Field(False, description="Extract plain text from HTML")
     extract_metadata: bool = Field(False, description="Extract metadata from HTML")
+    render_js: bool = Field(False, description="Render JavaScript before processing HTML")
+    js_timeout: int = Field(30, description="Timeout in seconds for JavaScript rendering")
+    interactive_actions: Optional[List[Dict[str, Any]]] = Field(None, description="List of interactive actions to perform when rendering with JavaScript")
+    extract_computed_styles: bool = Field(False, description="Extract computed CSS styles for elements (requires render_js)")
     
-    @root_validator(skip_on_failure=True)
-    def validate_input(cls, values):
-        """Validate that at least one input source is provided."""
-        html = values.get("html")
-        url = values.get("url")
-        file_path = values.get("file_path")
+    @model_validator(mode='after')
+    def check_input_source(self) -> 'HtmlProcessParams':
+        """Ensure at least one input source is provided."""
+        html = self.html
+        url = self.url
+        file_path = self.file_path
         
-        if html is None and url is None and file_path is None:
-            raise ValueError("One of html, url, or file_path must be provided")
-            
-        return values
+        if not any([html, url, file_path]):
+            raise ValueError("At least one of 'html', 'url', or 'file_path' must be provided")
+        
+        return self
 
 
 class HtmlProcessResult(BaseModel):

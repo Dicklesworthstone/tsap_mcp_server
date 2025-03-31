@@ -160,7 +160,7 @@ source .venv/bin/activate
 4. Install the package:
 
 ```bash
-uv pip install -e '.[dev,docs,performance,database,visualization,analysis,cloud]'         
+uv pip install -e '.[dev,docs,performance,database,visualization,analysis,cloud,semantic,js_rendering]'      
 ```
 
 ### GPU Support

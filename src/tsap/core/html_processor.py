@@ -5,9 +5,14 @@ This module provides functionality to parse, search and extract content from HTM
 with structure-aware processing and advanced selector support.
 """
 import asyncio
+import importlib.util
+import sys
+import subprocess
+import os
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from urllib.parse import urljoin
+import re
 
 try:
     from bs4 import BeautifulSoup, Tag, NavigableString
@@ -23,11 +28,16 @@ try:
 except ImportError:
     httpx = None
 
-from tsap.utils.logging import logger
-from tsap.performance_mode import get_parameter
-from tsap.core.base import BaseCoreTool, register_tool
-from tsap.mcp.models import HtmlProcessParams, HtmlProcessResult
+# Dynamically check if Playwright is available
+playwright_available = importlib.util.find_spec("playwright") is not None
 
+from tsap.utils.logging import logger  # noqa: E402
+from tsap.performance_mode import get_parameter  # noqa: E402
+from tsap.core.base import BaseCoreTool, register_tool  # noqa: E402
+from tsap.mcp.models import HtmlProcessParams, HtmlProcessResult  # noqa: E402
+
+# Constants
+PLAYWRIGHT_INSTALL_CMD = ["python", "-m", "playwright", "install", "chromium"]
 
 @dataclass
 class HtmlElement:
@@ -65,6 +75,16 @@ class HtmlProcessor(BaseCoreTool):
         if not self.has_httpx:
             logger.warning(
                 "httpx library not found. Install httpx for URL fetching.",
+                component="core",
+                operation="init_html_processor"
+            )
+        
+        # Check if Playwright is available for JavaScript rendering
+        self.has_playwright = playwright_available
+        
+        if not self.has_playwright:
+            logger.warning(
+                "Playwright library not found. Install playwright for JavaScript rendering.",
                 component="core",
                 operation="init_html_processor"
             )
@@ -110,6 +130,7 @@ class HtmlProcessor(BaseCoreTool):
                     "source": "url" if params.url else "file" if params.file_path else "direct",
                     "selector": params.selector,
                     "xpath": params.xpath,
+                    "render_js": params.render_js
                 }
             )
             
@@ -231,18 +252,284 @@ class HtmlProcessor(BaseCoreTool):
         # Check sources in priority order
         if params.html:
             # Direct HTML content
+            if params.render_js and params.url:
+                # If we have both HTML and URL, and JS rendering is requested,
+                # use the URL to render and the original HTML is ignored
+                logger.info(
+                    "Ignoring provided HTML content for JS rendering from URL",
+                    component="core",
+                    operation="get_html_content"
+                )
+                return await self._render_javascript(params.url, params.js_timeout)
             return params.html, None
             
-        if params.url and self.has_httpx:
+        if params.url:
             # Fetch from URL
-            return await self._fetch_url(params.url)
+            if params.render_js and self.has_playwright:
+                # Render with JavaScript
+                return await self._render_javascript(params.url, params.js_timeout)
+            elif self.has_httpx:
+                # Standard fetch without JS
+                return await self._fetch_url(params.url)
+            else:
+                logger.error(
+                    "httpx library not available for URL fetching",
+                    component="core",
+                    operation="get_html_content"
+                )
+                return None, params.url
             
         if params.file_path:
             # Read from file
-            return await self._read_file(params.file_path), None
+            content = await self._read_file(params.file_path)
+            if content and params.render_js and self.has_playwright:
+                # Convert file path to file URL and render
+                file_url = f"file://{os.path.abspath(params.file_path)}"
+                return await self._render_javascript(file_url, params.js_timeout)
+            return content, None
             
         # No valid source
         return None, None
+    
+    async def _render_javascript(
+        self, url: str, timeout: Optional[int] = 30, interactive_actions: Optional[List[Dict[str, Any]]] = None
+    ) -> Tuple[Optional[str], str]:
+        """Render a page with JavaScript using Playwright.
+        
+        Args:
+            url: URL to render
+            timeout: Timeout in seconds
+            interactive_actions: List of interactive actions to perform
+            
+        Returns:
+            Tuple of (html_content, base_url)
+        """
+        if not self.has_playwright:
+            # Attempt to install Playwright
+            installed = await self._ensure_playwright_installed()
+            if not installed:
+                logger.error(
+                    "Cannot render JavaScript: Playwright not available and installation failed",
+                    component="core",
+                    operation="html_processor"
+                )
+                return None, url
+                
+        # Run rendering in Playwright
+        from playwright.async_api import async_playwright
+        
+        try:
+            async with async_playwright() as p:
+                # Launch browser
+                browser = await p.chromium.launch()
+                
+                try:
+                    # Create a new page
+                    page = await browser.new_page()
+                    
+                    # Go to the URL
+                    await page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+                    
+                    # Wait a bit for any final JavaScript to execute
+                    await asyncio.sleep(1)
+                    
+                    # If interactive actions are provided, perform them
+                    if interactive_actions:
+                        for action in interactive_actions:
+                            action_type = action.get("action", "")
+                            
+                            if action_type == "click":
+                                selector = action.get("selector", "")
+                                if selector:
+                                    await page.click(selector)
+                            
+                            elif action_type == "fill":
+                                selector = action.get("selector", "")
+                                text = action.get("text", "")
+                                if selector and text:
+                                    await page.fill(selector, text)
+                            
+                            elif action_type == "wait_for_navigation":
+                                await page.wait_for_navigation()
+                            
+                            elif action_type == "wait_for_selector":
+                                selector = action.get("selector", "")
+                                if selector:
+                                    await page.wait_for_selector(selector)
+                            
+                            elif action_type == "wait_for_load_state":
+                                state = action.get("state", "load")
+                                await page.wait_for_load_state(state)
+                            
+                            # Add more actions as needed
+                    
+                    # Get the rendered HTML content
+                    content = await page.content()
+                    
+                    # Get the current URL (may have changed due to redirects or interactive actions)
+                    current_url = page.url
+                    
+                    return content, current_url
+                finally:
+                    await browser.close()
+        except Exception as e:
+            logger.error(
+                f"Error rendering JavaScript: {str(e)}",
+                component="core",
+                operation="html_processor",
+                exception=e
+            )
+            return None, url
+    
+    async def _ensure_playwright_installed(self) -> bool:
+        """Ensure Playwright is installed with at least one browser."""
+        try:
+            # First check if module is importable
+            from playwright.async_api import async_playwright
+            
+            # Try to initialize playwright to check if system dependencies are present
+            try:
+                async with async_playwright() as p:
+                    # Try to launch browser to check if system deps are present
+                    try:
+                        browser = await p.chromium.launch()
+                        await browser.close()
+                        logger.info("Playwright is fully operational", component="core", operation="html_processor")
+                        return True  # Everything works!
+                    except Exception as e:
+                        error_str = str(e)
+                        if "Host system is missing dependencies" in error_str:
+                            # Try to install dependencies automatically
+                            deps_installed = await self._ensure_playwright_system_deps()
+                            if deps_installed:
+                                # Try again after installing deps
+                                try:
+                                    browser = await p.chromium.launch()
+                                    await browser.close()
+                                    return True
+                                except Exception as launch_e:
+                                    logger.error(f"Browser launch failed after installing deps: {str(launch_e)}", 
+                                               component="core", operation="html_processor")
+                            # Fall back to no JS rendering if installation failed
+                            return False
+                        else:
+                            logger.error(f"Error launching browser: {error_str}",
+                                        component="core", operation="html_processor")
+                            return False
+            except Exception as e:
+                logger.error(f"Error initializing Playwright: {str(e)}",
+                            component="core", operation="html_processor")
+                return False
+            
+            # Check if browser is already installed
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install", "--help",
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            _, stderr = await proc.communicate()
+            
+            # If already installed or help succeeded, we're good
+            if b"already installed" in stderr or proc.returncode == 0:
+                return True
+            
+            # Install Chromium automatically
+            logger.info("Installing Chromium browser for JavaScript rendering...",
+                      component="core", operation="html_processor")
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install", "chromium"
+            )
+            await proc.communicate()
+            return proc.returncode == 0
+        except ImportError:
+            logger.warning("Playwright not available. Cannot render JavaScript.",
+                         component="core", operation="html_processor")
+            return False
+
+    async def _ensure_playwright_system_deps(self) -> bool:
+        """Attempt to install Playwright system dependencies automatically."""
+        try:
+            logger.info("Attempting to install Playwright system dependencies...", 
+                       component="core", operation="html_processor")
+            
+            # First try without sudo (in case user has permissions already)
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install-deps",
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            
+            # Check if it worked
+            if proc.returncode == 0:
+                logger.info("Successfully installed Playwright dependencies", 
+                           component="core", operation="html_processor")
+                return True
+            
+            # If it failed, try with sudo (will prompt for password)
+            logger.info("Attempting with sudo (may require password)...", 
+                       component="core", operation="html_processor")
+            
+            # Using sudo requires terminal interaction, so inform the user
+            print("\n------------------------")
+            print("TSAP needs to install system dependencies for JavaScript rendering.")
+            print("You may be prompted for your password.")
+            print("------------------------\n")
+            
+            # Use pkexec or sudo depending on what's available
+            for cmd in ["pkexec", "sudo"]:
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        cmd, sys.executable, "-m", "playwright", "install-deps",
+                        stdout=None, stderr=None  # Don't capture output so user can see prompts
+                    )
+                    await proc.wait()
+                    
+                    if proc.returncode == 0:
+                        logger.info(f"Successfully installed Playwright dependencies using {cmd}", 
+                                   component="core", operation="html_processor")
+                        return True
+                except FileNotFoundError:
+                    continue  # Try next command if this one isn't available
+            
+            # If we got here, both methods failed
+            logger.warning(
+                "Failed to install Playwright dependencies automatically. Manual install required.",
+                component="core", operation="html_processor"
+            )
+            
+            # Try to parse the exact packages needed
+            try:
+                # Run again to capture the error message
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-m", "playwright", "install-deps",
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
+                stdout, stderr = await proc.communicate()
+                stderr_text = stderr.decode('utf-8', errors='replace') if stderr else ""
+                
+                # Extract apt packages if mentioned
+                required_packages = []
+                if "apt-get install" in stderr_text:
+                    match = re.search(r"sudo apt-get install\s+(.+)", stderr_text)
+                    if match:
+                        required_packages = match.group(1).strip().split()
+                        
+                if required_packages:
+                    logger.info(
+                        f"Required packages: {' '.join(required_packages)}. Please install manually with sudo.",
+                        component="core", operation="html_processor"
+                    )
+                    print("\nTo manually install required packages, run:")
+                    print(f"sudo apt-get install {' '.join(required_packages)}")
+            except Exception as extract_e:
+                logger.error(f"Error extracting required packages: {str(extract_e)}",
+                            component="core", operation="html_processor")
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error installing Playwright dependencies: {str(e)}", 
+                        component="core", operation="html_processor")
+            return False
     
     async def _fetch_url(self, url: str) -> Tuple[Optional[str], str]:
         """Fetch HTML content from a URL.
@@ -602,7 +889,12 @@ class HtmlProcessor(BaseCoreTool):
                 # Extract additional attributes
                 for attr in ['title', 'rel', 'target', 'class', 'id']:
                     if attr in anchor.attrs:
-                        link_info[attr] = anchor[attr]
+                        # Convert lists (like multi-value class attributes) to strings
+                        value = anchor.attrs[attr]
+                        if isinstance(value, list):
+                            link_info[attr] = ' '.join(value)
+                        else:
+                            link_info[attr] = str(value)
                 
                 links.append(link_info)
             
@@ -728,6 +1020,180 @@ class HtmlProcessor(BaseCoreTool):
             return metadata
         
         return await loop.run_in_executor(None, extract)
+
+    async def _extract_computed_styles(self, soup: Any, elements: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Extract computed styles for elements.
+        
+        This requires JavaScript rendering to be enabled and uses JavaScript to 
+        extract the computed CSS styles for each element.
+        
+        Args:
+            soup: BeautifulSoup object (not used in this method but kept for consistency)
+            elements: List of element dictionaries to enhance with computed styles
+            
+        Returns:
+            Updated element dictionaries with computed styles
+        """
+        if not self.has_playwright or not hasattr(self, "_page"):
+            logger.warning(
+                "Cannot extract computed styles: Playwright not available or page not rendered",
+                component="core",
+                operation="html_processor"
+            )
+            return elements
+            
+        # For each element, extract its computed styles using JavaScript
+        for i, elem in enumerate(elements):
+            try:
+                xpath = elem.get("xpath")
+                if not xpath:
+                    continue
+                    
+                # Use JavaScript to get computed styles
+                computed_styles = await self._page.evaluate(f"""() => {{
+                    const element = document.evaluate(
+                        "{xpath}", 
+                        document, 
+                        null, 
+                        XPathResult.FIRST_ORDERED_NODE_TYPE, 
+                        null
+                    ).singleNodeValue;
+                    
+                    if (!element) return null;
+                    
+                    const styles = window.getComputedStyle(element);
+                    const result = {{}};
+                    
+                    // Extract common useful properties
+                    ['color', 'background-color', 'font-family', 'font-size', 
+                     'margin', 'padding', 'display', 'position', 'width', 'height']
+                    .forEach(prop => {{
+                        result[prop] = styles.getPropertyValue(prop);
+                    }});
+                    
+                    return result;
+                }}""")
+                
+                if computed_styles:
+                    elem["computed_styles"] = computed_styles
+            except Exception as e:
+                logger.error(
+                    f"Error extracting computed styles for element {i}: {str(e)}",
+                    component="core",
+                    operation="html_processor",
+                    exception=e
+                )
+                
+        return elements
+            
+    async def process_html(
+        self,
+        html: Optional[str] = None,
+        url: Optional[str] = None,
+        file_path: Optional[str] = None,
+        selector: Optional[str] = None,
+        xpath: Optional[str] = None,
+        extract_tables: bool = False,
+        extract_links: bool = False,
+        extract_text: bool = False,
+        extract_metadata: bool = False,
+        render_js: bool = False,
+        js_timeout: int = 30,
+        interactive_actions: Optional[List[Dict[str, Any]]] = None,
+        extract_computed_styles: bool = False
+    ) -> Dict[str, Any]:
+        """Process HTML content.
+        
+        Args:
+            html: HTML content to process
+            url: URL to fetch HTML from
+            file_path: Path to HTML file
+            selector: CSS selector for elements to extract
+            xpath: XPath for elements to extract
+            extract_tables: Whether to extract tables
+            extract_links: Whether to extract links
+            extract_text: Whether to extract plain text
+            extract_metadata: Whether to extract metadata
+            render_js: Whether to render JavaScript
+            js_timeout: Timeout for JavaScript rendering
+            interactive_actions: List of interactive actions for JavaScript rendering
+            extract_computed_styles: Whether to extract computed CSS styles
+            
+        Returns:
+            Dictionary of processed results
+        """
+        logger.info(
+            "Processing HTML content",
+            component="core",
+            operation="html_process"
+        )
+        
+        result = {
+            "elements": None,
+            "tables": None,
+            "links": None,
+            "text": None,
+            "metadata": None
+        }
+        
+        # Source priority: HTML > URL > File
+        html_content = html
+        base_url = url
+        
+        # 1. Get HTML content from source
+        if html_content is None and url is not None:
+            if render_js:
+                html_content, base_url = await self._render_javascript(
+                    url, 
+                    timeout=js_timeout,
+                    interactive_actions=interactive_actions
+                )
+                # Store the page for potential computed style extraction
+                self._current_url = base_url
+            else:
+                html_content, base_url = await self._fetch_url(url)
+        
+        if html_content is None and file_path is not None:
+            html_content = await self._read_file(file_path)
+            base_url = None
+            
+        if html_content is None:
+            raise ValueError("Failed to obtain HTML content from any source")
+            
+        # 2. Parse HTML
+        soup = await self._parse_html(html_content)
+        if not soup:
+            raise ValueError("Failed to parse HTML content")
+            
+        # 3. Process according to parameters
+        if selector:
+            result["elements"] = await self._extract_elements(soup, selector, "css")
+        elif xpath:
+            result["elements"] = await self._extract_elements(soup, xpath, "xpath")
+            
+        if extract_tables:
+            result["tables"] = await self._extract_tables(soup)
+            
+        if extract_links:
+            result["links"] = await self._extract_links(soup, base_url)
+            
+        if extract_text:
+            result["text"] = await self._extract_text(soup)
+            
+        if extract_metadata:
+            result["metadata"] = await self._extract_metadata(soup)
+            
+        # 4. Extract computed styles if requested
+        if extract_computed_styles and render_js and result["elements"]:
+            result["elements"] = await self._extract_computed_styles(soup, result["elements"])
+            
+        logger.info(
+            "HTML processing completed",
+            component="core",
+            operation="html_process"
+        )
+        
+        return result
 
 
 # Singleton instance

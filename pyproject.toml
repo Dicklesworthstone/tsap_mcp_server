@@ -215,6 +215,7 @@ all = [
     "torch>=2.0.0",               # PyTorch
     "numpy>=1.24.0",              # Required for arrays
     "einops",
+    "playwright>=1.40.0",         # For JS rendering
 ]
 
 [project.urls]
@@ -273,3 +274,7 @@ omit = ["tests/*", "examples/*"]
 [tool.pluggy]
 # Plugin system configuration
 project_name = "tsap"
+
+js_rendering = [
+    "playwright>=1.40.0",     # Browser automation for JavaScript rendering
+]

@@ -10,6 +10,10 @@ import traceback
 from typing import Dict, Optional, Callable, Any
 
 from tsap.utils.logging import logger
+
+# Log module import
+logger.info("Importing src.tsap.mcp.handler module...", component="mcp", operation="module_import")
+
 from tsap.performance_mode import get_performance_mode, set_performance_mode
 from tsap.version import __version__, get_version_info
 from tsap.core.ripgrep import ripgrep_search
@@ -26,6 +30,7 @@ from tsap.composite.document_profiler import profile_documents
 import faiss
 from tsap.composite.semantic_search import SemanticSearchParams, get_operation
 from tsap.core.table_processor import process_table, get_table_processor
+from tsap.core.html_processor import process_html, HtmlProcessParams
 
 from .protocol import (
     MCPRequest, MCPResponse, MCPCommandType,
@@ -53,9 +58,11 @@ def register_command_handler(command: str, handler: Callable):
         command: Command name to handle
         handler: Handler function
     """
-    _command_handlers[command] = handler
+    # Ensure the key is always the string value
+    key = command.value if isinstance(command, MCPCommandType) else command
+    _command_handlers[key] = handler
     logger.debug(
-        f"Registered handler for MCP command: {command}",
+        f"Registered handler for MCP command: {key}", # Log the key being used
         component="mcp",
         operation="register_handler"
     )
@@ -70,6 +77,13 @@ def get_command_handler(command: str) -> Optional[Callable]:
     Returns:
         Handler function or None if not found
     """
+    logger.info(
+        f"Getting handler for MCP command: {command}",
+        component="mcp",
+        operation="get_handler"
+    )
+    # Log dictionary ID at lookup time
+    logger.info(f"Checking _command_handlers ID at lookup: {id(_command_handlers)}", component="mcp", operation="get_handler")
     return _command_handlers.get(command)
 
 
@@ -206,11 +220,32 @@ def handle_info_command(request: MCPRequest, start_time: float) -> MCPResponse:
     Returns:
         MCP response
     """
+    # Get tool-specific parameter information
+    html_processor_params = [
+        "html", "url", "file_path", "selector", "xpath", 
+        "extract_tables", "extract_links", "extract_text", "extract_metadata",
+        "render_js", "js_timeout", "interactive_actions", "extract_computed_styles"
+    ]
+    
+    ripgrep_params = [
+        "pattern", "paths", "file_patterns", "ignore_case", "word_regexp", 
+        "max_count", "max_depth", "context_lines", "include_hidden", 
+        "follow_symlinks", "max_matches_per_file", "max_total_matches"
+    ]
+    
+    jq_params = [
+        "query", "input_json", "input_files", "compact_output", 
+        "raw_output", "slurp", "sort_keys"
+    ]
+    
     info = {
         "version": __version__,
         "version_info": get_version_info(),
         "performance_mode": get_performance_mode(),
         "available_commands": list(MCPCommandType),
+        "html_processor_params": html_processor_params,
+        "ripgrep_params": ripgrep_params,
+        "jq_params": jq_params,
     }
     
     return create_success_response(
@@ -332,6 +367,7 @@ def initialize_handlers():
     register_command_handler(MCPCommandType.SQLITE_QUERY, handle_sqlite_query)
     register_command_handler(MCPCommandType.PDF_EXTRACT, handle_pdf_extract)
     register_command_handler(MCPCommandType.TABLE_PROCESS, handle_table_process)
+    register_command_handler(MCPCommandType.HTML_PROCESS, handle_html_processor)
     
     # Register composite operations
     register_command_handler(MCPCommandType.PARALLEL_SEARCH, handle_parallel_search)
@@ -345,10 +381,24 @@ def initialize_handlers():
     # Register evolution tools
     register_command_handler(MCPCommandType.PATTERN_ANALYZE, handle_pattern_analyze)
     register_command_handler(MCPCommandType.DOCUMENT_PROFILE, handle_document_profile)
+    register_command_handler(MCPCommandType.SEMANTIC_SEARCH, handle_semantic_search)
     
     # Register test handler
     register_command_handler("test", handle_test)
     
+    # Add logging to check handlers dict *after* registration
+    logger.info(
+        f"_command_handlers after initialization: {list(_command_handlers.keys())}",
+        component="mcp",
+        operation="register_handlers",
+        context={
+            "handler_count": len(_command_handlers),
+        }
+    )
+    # Log dictionary ID after initialization
+    logger.info(f"_command_handlers ID after init: {id(_command_handlers)}", component="mcp", operation="register_handlers")
+    
+    # Original logging (slightly redundant now but keep for consistency)
     logger.info(
         "Registered MCP command handlers",
         component="mcp",
@@ -359,7 +409,6 @@ def initialize_handlers():
     )
 
 
-@command_handler(MCPCommandType.RIPGREP_SEARCH)
 async def handle_ripgrep_search(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle ripgrep_search command.
     
@@ -405,7 +454,6 @@ async def handle_ripgrep_search(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
-@command_handler(MCPCommandType.JQ_QUERY)
 async def handle_jq_query(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle jq_query command.
     
@@ -442,7 +490,6 @@ async def handle_jq_query(args: Dict[str, Any]) -> Dict[str, Any]:
         raise
 
 
-@command_handler(MCPCommandType.AWK_PROCESS)
 async def handle_awk_process(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle awk_process command.
     
@@ -465,7 +512,6 @@ async def handle_awk_process(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
-@command_handler(MCPCommandType.PARALLEL_SEARCH)
 async def handle_parallel_search(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle parallel_search command.
     
@@ -488,7 +534,6 @@ async def handle_parallel_search(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
-@command_handler(MCPCommandType.CONTEXT_EXTRACT)
 async def handle_context_extract(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle context_extract command.
     
@@ -511,7 +556,6 @@ async def handle_context_extract(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
-@command_handler(MCPCommandType.CODE_ANALYZE)
 async def handle_code_analyze(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle code_analyze command.
     
@@ -534,7 +578,6 @@ async def handle_code_analyze(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
-@command_handler(MCPCommandType.DOCUMENT_EXPLORE)
 async def handle_document_explore(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle document_explore command.
     
@@ -557,7 +600,6 @@ async def handle_document_explore(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
-@command_handler(MCPCommandType.PATTERN_ANALYZE)
 async def handle_pattern_analyze(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle pattern_analyze command.
     
@@ -588,7 +630,6 @@ async def handle_pattern_analyze(args: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-@command_handler(MCPCommandType.STRATEGY_COMPILE)
 async def handle_strategy_compile(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle strategy_compile command.
     
@@ -611,7 +652,6 @@ async def handle_strategy_compile(args: Dict[str, Any]) -> Dict[str, Any]:
     return result.model_dump()
 
 
-@command_handler(MCPCommandType.SQLITE_QUERY)
 async def handle_sqlite_query(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle sqlite_query command.
     
@@ -627,14 +667,28 @@ async def handle_sqlite_query(args: Dict[str, Any]) -> Dict[str, Any]:
         operation="sqlite_query"
     )
     
-    # Execute sqlite query
-    result = await sqlite_query(args)
-    
-    # Convert to serializable form
-    return result.model_dump()
+    try:
+        # Convert dict to SqliteQueryParams
+        from tsap.mcp.models import SqliteQueryParams
+        params = SqliteQueryParams(**args)
+        
+        # Execute sqlite query with proper parameters
+        result = await sqlite_query(params)
+        
+        # Convert to serializable form
+        return result.model_dump()
+    except Exception as e:
+        logger.error(
+            f"Error handling SQLite query: {str(e)}",
+            component="mcp",
+            operation="handle_sqlite_query",
+            exception=e,
+            context=args
+        )
+        # Re-raise to be caught by the main request handler
+        raise
 
 
-@command_handler(MCPCommandType.PDF_EXTRACT)
 async def handle_pdf_extract(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle pdf_extract command.
 
@@ -682,7 +736,6 @@ async def handle_pdf_extract(args: Dict[str, Any]) -> Dict[str, Any]:
         raise
 
 
-@command_handler(MCPCommandType.TABLE_PROCESS)
 async def handle_table_process(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle table_process command.
     
@@ -729,7 +782,6 @@ async def handle_table_process(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # Document Profiling Handler
-@command_handler(MCPCommandType.DOCUMENT_PROFILE)
 async def handle_document_profile(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle document_profile command.
     
@@ -758,39 +810,46 @@ async def handle_document_profile(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # Semantic Search Handler
-@command_handler(MCPCommandType.SEMANTIC_SEARCH)
 async def handle_semantic_search(args: Dict[str, Any]) -> Dict[str, Any]:
-    texts = args["texts"]
-    query = args["query"]
-    ids = args.get("ids", [f"doc_{i}" for i in range(len(texts))])
-    top_k = args.get("top_k", 10)
-    # Extract metadata from args, providing a default if missing
-    metadata = args.get("metadata", [{} for _ in range(len(texts))])
-
-    op = get_operation("semantic_search")
-    # Pass metadata when creating params
-    params = SemanticSearchParams(texts=texts, query=query, ids=ids, top_k=top_k, metadata=metadata)
-    result = await op.execute_with_stats(params)
-
-    backend = "gpu" if hasattr(faiss, "StandardGpuResources") and faiss.get_num_gpus() > 0 else "cpu"
-    logger.info(
-        f"Semantic search executed with {backend} FAISS backend",
-        component="mcp",
-        operation="semantic_search",
-        context={"backend": backend, "query": query, "result_count": len(result)}
-    )
-
-    return {
-        "results": result,
-        "faiss_backend": backend,
-        "query": query,
-        "top_k": top_k
-    }
+    """Handle the semantic_search command."""
+    # Example of using a Pydantic model for parsing/validation
+    try:
+        params = SemanticSearchParams(**args)
+        operation = get_operation("semantic_search")
+        result = await operation.execute(params)
+        return result.dict() # Convert result model to dict
+    except Exception as e:
+        logger.error(f"Error during semantic search: {e}", exception=e)
+        # Re-raise or handle appropriately
+        raise # Reraise to be caught by the main handler
 
 
-# Simple test handler for debugging
+# --- Add Handler for HTML Processor --- #
+async def handle_html_processor(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle the html_processor command."""
+    try:
+        # Log the HTML processing request
+        logger.info(
+            "Handling HTML process command",
+            component="mcp",
+            operation="html_process"
+        )
+        
+        # Validate/parse args using the Pydantic model from core
+        params = HtmlProcessParams(**args)
+        # Call the core function
+        result = await process_html(params)
+        # Convert the result Pydantic model back to a dictionary using model_dump()
+        return result.model_dump() 
+    except Exception as e:
+        logger.error(f"Error during HTML processing: {e}", exception=e)
+        # Re-raise the exception to be caught by the main request handler
+        raise
+# --- End Handler for HTML Processor --- #
+
+
 async def handle_test(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle test command."""
+    """Handle the test command (for debugging)."""
     logger.info(
         "Handling test command",
         component="mcp",

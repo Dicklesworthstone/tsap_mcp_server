@@ -245,6 +245,55 @@ class MCPClient:
         # Send the request
         return await self.send_request("awk_process", args)
 
+    async def html_process(
+        self,
+        html: Optional[str] = None,
+        url: Optional[str] = None,
+        file_path: Optional[str] = None,
+        selector: Optional[str] = None,
+        xpath: Optional[str] = None,
+        extract_tables: bool = False,
+        extract_links: bool = False,
+        extract_text: bool = False,
+        extract_metadata: bool = False,
+        mode: Optional[str] = None,
+        **kwargs # Catch any other potential future args
+    ) -> Dict[str, Any]:
+        """Process HTML content.
+
+        Args:
+            html: Optional HTML content string.
+            url: Optional URL to fetch HTML from.
+            file_path: Optional file path to read HTML from.
+            selector: Optional CSS selector to extract elements.
+            xpath: Optional XPath expression (basic support).
+            extract_tables: Whether to extract tables.
+            extract_links: Whether to extract links.
+            extract_text: Whether to extract clean text.
+            extract_metadata: Whether to extract metadata.
+            mode: Optional performance mode.
+            **kwargs: Any additional arguments for future compatibility.
+
+        Returns:
+            HTML processing results.
+        """
+        args = {
+            "html": html,
+            "url": url,
+            "file_path": file_path,
+            "selector": selector,
+            "xpath": xpath,
+            "extract_tables": extract_tables,
+            "extract_links": extract_links,
+            "extract_text": extract_text,
+            "extract_metadata": extract_metadata,
+            **kwargs # Include any extra args passed
+        }
+        # Remove keys with None values as the server might expect them to be absent
+        args = {k: v for k, v in args.items() if v is not None and v is not False}
+
+        return await self.send_request("html_process", args, mode=mode)
+
     async def jq_process(
         self,
         query: str,

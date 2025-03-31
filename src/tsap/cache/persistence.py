@@ -19,7 +19,7 @@ import threading
 import zlib
 import hashlib
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Generator
 from contextlib import contextmanager
 
 from tsap.utils.errors import TSAPError
@@ -685,7 +685,7 @@ class SqlitePersistenceProvider(CachePersistenceProvider):
             )
     
     @contextmanager
-    def _get_connection(self) -> sqlite3.Connection:
+    def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         """
         Get a SQLite connection from the thread-local pool.
         

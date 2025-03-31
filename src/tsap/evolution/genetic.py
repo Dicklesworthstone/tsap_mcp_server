@@ -8,13 +8,11 @@ selection strategies.
 """
 
 import random
-import asyncio
 import re
 import string
-import json
 import time
 import uuid
-from typing import Dict, List, Any, Optional, Callable, Tuple, Set, Union
+from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -499,7 +497,7 @@ class GeneticAlgorithm:
             child_genome = self.crossover_function(parent1.genome, parent2.genome)
         else:
             # Default crossover implementation based on genome type
-            genome_type = type(parent1.genome)
+            genome_type = type(parent1.genome)  # noqa: F841
             
             if isinstance(parent1.genome, str):
                 child_genome = self._crossover_string(parent1.genome, parent2.genome)
@@ -856,15 +854,15 @@ class GeneticAlgorithm:
             key = random.choice(list(result.keys()))
             # For simplicity, generate a random value of the same type
             value_type = type(result[key])
-            if value_type == int:
+            if value_type is int:
                 result[key] = random.randint(0, 100)
-            elif value_type == float:
+            elif value_type is float:
                 result[key] = random.random() * 100
-            elif value_type == bool:
+            elif value_type is bool:
                 result[key] = random.choice([True, False])
-            elif value_type == str:
+            elif value_type is str:
                 result[key] = "".join(random.choice(string.ascii_letters) for _ in range(5))
-            elif value_type == list:
+            elif value_type is list:
                 result[key] = [random.randint(0, 100) for _ in range(3)]
         
         elif mutation_type == "add":
@@ -875,13 +873,13 @@ class GeneticAlgorithm:
             
             # Generate a random value
             value_type = random.choice([int, float, bool, str])
-            if value_type == int:
+            if value_type is int:
                 result[key] = random.randint(0, 100)
-            elif value_type == float:
+            elif value_type is float:
                 result[key] = random.random() * 100
-            elif value_type == bool:
+            elif value_type is bool:
                 result[key] = random.choice([True, False])
-            elif value_type == str:
+            elif value_type is str:
                 result[key] = "".join(random.choice(string.ascii_letters) for _ in range(5))
         
         elif mutation_type == "remove" and result:

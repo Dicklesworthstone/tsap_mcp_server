@@ -6,14 +6,14 @@ import argparse
 import asyncio
 import json
 import glob
-from typing import List, Dict, Any
-# Use absolute import relative to project root in sys.path
-from mcp_client_example import MCPClient
+from typing import List, Dict, Any, Optional
+from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
 from rich.rule import Rule
+from tsap.mcp import MCPClient
 
 # Initialize console after rich imports
 console = Console()
@@ -228,31 +228,9 @@ async def run_semantic_search_demo(query: str, data_dir: str):
 
         # Process and display results
         print_section("Search Results")
-        # Improved check: Verify status is success AND error is None/null
-        if search_response.get("status") != "success" or search_response.get("error") is not None:
-            console.print("[bold red]Server returned an error or unexpected status:[/bold red]")
-            # Print the whole response if it's not success or has an error
-            error_content = search_response.get("error", "No error field found")
-            try:
-                # Try pretty printing if it's json-serializable
-                error_display = json.dumps(error_content, indent=2)
-            except TypeError:
-                # Otherwise, just convert to string
-                error_display = str(error_content)
-                
-            console.print(f"Status: {search_response.get('status', 'N/A')}")
-            console.print("Error Content:")
-            console.print(Syntax(error_display, "json" if isinstance(error_content, (dict, list)) else "text", theme="default", line_numbers=True))
-            # Optionally print the full response for more context
-            # console.print("[dim]Full response:[/dim]")
-            # console.print(Syntax(json.dumps(search_response, indent=2), "json", theme="default"))
-        elif "data" in search_response:
-            # This path is now only taken if status is 'success' and error is None
-            display_results(search_response["data"])
-        else:
-            # This case might indicate success status but missing data field
-            console.print("[bold red]Unexpected response format: Status success but no data field.[/bold red]")
-            console.print(Syntax(json.dumps(search_response, indent=2), "json", theme="default", line_numbers=True))
+        
+        # Pass the extracted payload
+        display_results(search_response.get("data"))
 
 # --- Entry Point ---
 

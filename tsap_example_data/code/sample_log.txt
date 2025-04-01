@@ -1,0 +1,48 @@
+# Application Log File
+# This file contains various log entries demonstrating different patterns
+
+# System startup logs
+2024-03-15 10:00:00,000 - system - INFO - Application starting up
+2024-03-15 10:00:01,234 - config - INFO - Loading configuration from config.json
+2024-03-15 10:00:01,567 - config - INFO - Loading settings from settings.yml
+2024-03-15 10:00:01,789 - config - INFO - Reading app_settings.ini
+
+# Database connection logs
+2024-03-15 10:00:02,123 - database - INFO - Connecting to database at localhost:5432
+2024-03-15 10:00:02,456 - database - ERROR - Failed to connect to database: Connection refused
+2024-03-15 10:00:03,789 - database - INFO - Retrying connection...
+2024-03-15 10:00:04,012 - database - INFO - Successfully connected to database
+
+# API request logs
+2024-03-15 10:01:00,000 - api - INFO - Making request to https://api.example.com/v1/users
+2024-03-15 10:01:00,234 - api - WARNING - API request timeout after 30 seconds
+2024-03-15 10:01:00,567 - api - ERROR - Failed to fetch user data: Connection timeout
+2024-03-15 10:01:01,789 - api - INFO - Retrying API request...
+
+# Security logs
+2024-03-15 10:02:00,000 - security - WARNING - Multiple failed login attempts from IP 192.168.1.100
+2024-03-15 10:02:00,234 - security - ERROR - Invalid API key detected: sk_live_51H7J8K9L0M1N2O3P4Q5R6S7T8U9V0W1X2Y3Z4
+2024-03-15 10:02:00,567 - security - INFO - Blocking IP 192.168.1.100 for 15 minutes
+
+# User activity logs
+2024-03-15 10:03:00,000 - user - INFO - User login successful: test_user
+2024-03-15 10:03:00,234 - user - INFO - User profile updated: test_user
+2024-03-15 10:03:00,567 - user - ERROR - Failed to process user data: Invalid input
+2024-03-15 10:03:01,789 - user - INFO - User logout: test_user
+
+# Cache logs
+2024-03-15 10:04:00,000 - cache - INFO - Cache miss for key: user_123
+2024-03-15 10:04:00,234 - cache - INFO - Cache hit for key: product_456
+2024-03-15 10:04:00,567 - cache - ERROR - Redis connection failed: Connection refused
+2024-03-15 10:04:01,789 - cache - INFO - Cache reconnected successfully
+
+# Email logs
+2024-03-15 10:05:00,000 - email - INFO - Sending email to user@example.com
+2024-03-15 10:05:00,234 - email - ERROR - Failed to send email: SMTP connection failed
+2024-03-15 10:05:00,567 - email - INFO - Retrying email send...
+2024-03-15 10:05:01,789 - email - INFO - Email sent successfully
+
+# System shutdown logs
+2024-03-15 11:00:00,000 - system - INFO - Application shutting down
+2024-03-15 11:00:00,234 - system - INFO - Cleaning up resources
+2024-03-15 11:00:00,567 - system - INFO - Shutdown complete

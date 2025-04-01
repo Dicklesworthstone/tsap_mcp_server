@@ -2,28 +2,25 @@
 """
 Advanced AWK Demo
 
-This script demonstrates the comprehensive features of the AWK integration
-in TSAP, including processing strings, files, using variables, and synergy
-with other tools like Ripgrep.
+This script demonstrates the comprehensive features of the AWK Process
+tool in TSAP, including text processing, data extraction, and transformation.
 """
 import asyncio
+from datetime import datetime
 import os
 import sys
-from datetime import datetime
+import json
+import tempfile
 from pathlib import Path
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
-from rich.console import Console
 from rich.rule import Rule
+from typing import Dict, Any, List, Optional, Union
 
-# Assuming mcp_client_example.py is in the same directory or accessible
-# Adjust the import path if necessary
-try:
-    from mcp_client_example import MCPClient
-except ImportError:
-    print("Error: Could not import MCPClient. Make sure mcp_client_example.py is accessible.")
-    sys.exit(1)
+# Import the MCP client from the library
+from tsap.mcp import MCPClient
 
 console = Console()
 

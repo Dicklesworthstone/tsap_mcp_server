@@ -15,7 +15,7 @@ from rich.table import Table
 from rich.syntax import Syntax
 from rich.console import Console
 
-from mcp_client_example import MCPClient  # Import our existing client
+from tsap.mcp import MCPClient
 
 console = Console()
 

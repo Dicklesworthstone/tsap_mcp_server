@@ -1,0 +1,73 @@
+# Application Configuration
+# This file contains various application settings and configurations
+
+# Server settings
+server:
+  host: 0.0.0.0
+  port: 8080
+  debug: true
+  
+# Database connection
+database:
+  host: localhost
+  port: 5432
+  name: myapp_db
+  user: admin
+  password: "Admin@123!"  # TODO: Move to environment variables
+  ssl: true
+  
+# API settings
+api:
+  base_url: "https://api.example.com"
+  version: "v1"
+  timeout: 30
+  api_key: "sk_live_51H7J8K9L0M1N2O3P4Q5R6S7T8U9V0W1X2Y3Z4"
+  endpoints:
+    users: "/users"
+    products: "/products"
+    orders: "/orders"
+  rate_limit: 100
+  
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "app.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+  
+# Security
+security:
+  # TODO: Implement proper key rotation
+  ssl: true
+  key: "/etc/ssl/private.key"
+  cert: "/etc/ssl/cert.pem"
+  jwt_secret: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+  password_hash_algorithm: "md5"  # TODO: Use stronger algorithm
+  allowed_origins:
+    - "http://localhost:3000"
+    - "https://app.example.com"
+
+# Feature Flags
+features:
+  beta_features: false
+  maintenance_mode: false
+  debug_mode: true
+  rate_limiting: true
+  caching: true
+
+# Cache Settings
+cache:
+  type: "redis"
+  host: "localhost"
+  port: 6379
+  password: "Cache@123!"  # TODO: Move to environment variables
+  ttl: 3600
+
+# Email Configuration
+email:
+  smtp_host: "smtp.example.com"
+  smtp_port: 587
+  username: "noreply@example.com"
+  password: "Email@123!"  # TODO: Move to environment variables
+  use_tls: true

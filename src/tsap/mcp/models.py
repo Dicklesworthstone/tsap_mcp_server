@@ -1343,34 +1343,18 @@ class StrategyJournalResult(BaseModel):
 
 
 class StructureSearchParams(BaseModel):
-    """Parameters for structure search operation."""
+    """Parameters for structure-aware search operations."""
     
-    paths: List[str] = Field(..., description="Paths to search in")
-    structure_type: str = Field(..., description="Type of structure to search for")
-    structure_pattern: str = Field(..., description="Pattern describing the structure")
-    file_patterns: Optional[List[str]] = Field(
-        None, 
-        description="Only search files matching these glob patterns"
-    )
-    exclude_patterns: Optional[List[str]] = Field(
-        None, 
-        description="Exclude files matching these glob patterns"
-    )
-    max_matches: Optional[int] = Field(None, description="Maximum matches to return")
+    paths: List[str] = Field(..., description="Paths to search")
+    structure_pattern: Optional[str] = Field(None, description="Pattern to search for")
+    structure_type: Optional[str] = Field(None, description="Type of structure to look for")
+    parent_type: Optional[str] = Field(None, description="Type of parent structure to filter by")
+    case_sensitive: bool = Field(False, description="Whether search is case sensitive")
+    is_regex: bool = Field(False, description="Whether pattern is a regular expression")
+    max_results: Optional[int] = Field(None, description="Maximum number of results to return")
     min_confidence: float = Field(0.5, description="Minimum confidence score (0.0-1.0)")
     include_context: bool = Field(True, description="Include surrounding context")
     context_lines: int = Field(2, description="Number of context lines to include")
-    
-    @validator("structure_type")
-    def validate_structure_type(cls, v):
-        """Validate structure type."""
-        allowed = [
-            "function", "class", "method", "block", "section", "nested", "custom",
-            "conditional", "loop", "declaration", "definition", "import"
-        ]
-        if v not in allowed:
-            raise ValueError(f"Structure type must be one of: {', '.join(allowed)}")
-        return v
 
 
 class StructureSearchResult(BaseModel):

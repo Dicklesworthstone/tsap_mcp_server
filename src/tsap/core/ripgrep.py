@@ -5,14 +5,11 @@ This module provides functionality to search files using the ripgrep command-lin
 tool, with enhanced features and result processing.
 """
 import os
-import re
 import json
 import asyncio
 import shutil
-import tempfile
 import subprocess
-from typing import Dict, List, Any, Optional, Union, Tuple, Set
-from pathlib import Path
+from typing import Dict, List, Any, Optional, Tuple
 import shlex
 
 from tsap.utils.logging import logger

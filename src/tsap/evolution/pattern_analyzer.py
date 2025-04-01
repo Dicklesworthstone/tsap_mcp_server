@@ -4,22 +4,177 @@ Pattern analyzer for TSAP's evolution system.
 This module provides functionality to analyze and optimize search patterns,
 learning from previous results to improve future searches.
 """
-import os
 import re
-import asyncio
-import json
-from typing import Dict, List, Any, Optional, Union, Set, Tuple
+import os
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 import time
-import datetime
 import statistics
-from collections import Counter, defaultdict
+import json
+import uuid
+import asyncio
+import httpx
+import logging
 
 from tsap.utils.logging import logger
 from tsap.core.ripgrep import ripgrep_search
-from tsap.composite.parallel import parallel_search
-from tsap.mcp.models import SearchPattern, ParallelSearchParams, RipgrepSearchParams
+from tsap.mcp.models import RipgrepSearchParams
 
+# Define a simple MCPClient class for internal use
+class MCPClient:
+    """Simple client for interacting with MCP Servers."""
+
+    def __init__(self, base_url: str = "http://localhost:8013"):
+        self.base_url = base_url
+        self.headers = {
+            "Content-Type": "application/json",
+        }
+        self._client = httpx.AsyncClient(
+            base_url=self.base_url, 
+            headers=self.headers, 
+            timeout=60.0
+        )
+
+    async def close(self):
+        """Close the underlying HTTP client."""
+        await self._client.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+    async def send_request(self, command: str, args: Dict[str, Any], mode: Optional[str] = None) -> Dict[str, Any]:
+        """Send an MCP request to the server."""
+        # Create an MCP request payload
+        request = {
+            "request_id": str(uuid.uuid4()),
+            "command": command,
+            "args": args,
+        }
+        
+        if mode:
+            request["mode"] = mode
+            
+        try:
+            response = await self._client.post("/mcp/", json=request)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error in MCP request: {e}", component="MCPClient")
+            return {"error": {"code": "CLIENT_ERROR", "message": str(e)}}
+
+# Check if LLM pattern generation is enabled
+USE_LLM_PATTERN_GENERATION = os.environ.get("USE_LLM_PATTERN_GENERATION", "").lower() in ("true", "1", "yes")
+LLM_MCP_SERVER_URL = os.environ.get("LLM_MCP_SERVER_URL", "http://localhost:8013")
+
+
+async def generate_patterns_with_llm(
+    pattern: str,
+    description: str,
+    reference_set: Dict[str, List[str]],
+    num_variants: int = 5
+) -> List[str]:
+    """Generate regex pattern variants using an LLM through MCP.
+    
+    Args:
+        pattern: The original regex pattern
+        description: Description of what the pattern is intended to match
+        reference_set: Dictionary containing 'positive' and 'negative' example strings
+        num_variants: Number of pattern variants to generate
+        
+    Returns:
+        List of generated regex pattern variants
+    """
+    try:
+        # Connect to the LLM MCP Server
+        async with MCPClient(base_url=LLM_MCP_SERVER_URL) as client:
+            positive_examples = reference_set.get("positive", [])
+            negative_examples = reference_set.get("negative", [])
+            
+            # Create a prompt that instructs the LLM to generate regex patterns
+            prompt = f"""Generate {num_variants} improved regular expression patterns based on the following information:
+
+Original regex pattern: {pattern}
+Description: {description}
+
+The regex should match all positive examples but not match any negative examples if possible.
+
+Positive examples (should match):
+{json.dumps(positive_examples, indent=2)}
+
+Negative examples (should NOT match):
+{json.dumps(negative_examples, indent=2)}
+
+Provide your response as a JSON array of regex patterns only, with no explanation. For example:
+["pattern1", "pattern2", "pattern3"]
+"""
+            
+            # Call the LLM using the semantic_search endpoint
+            response = await client.send_request("completions", {
+                "prompt": prompt,
+                "max_tokens": 1000,
+                "temperature": 0.7,
+                "stop": ["\n\n"],
+                "model": "default"  # Use default model configured for the gateway
+            })
+            
+            # Extract pattern variants from response
+            if "data" in response and "text" in response["data"]:
+                generated_text = response["data"]["text"].strip()
+                
+                # Extract JSON array portion
+                try:
+                    # Try to find a JSON array in the response
+                    start_idx = generated_text.find("[")
+                    end_idx = generated_text.rfind("]") + 1
+                    
+                    if start_idx >= 0 and end_idx > start_idx:
+                        json_array = generated_text[start_idx:end_idx]
+                        pattern_variants = json.loads(json_array)
+                        
+                        # Validate patterns
+                        valid_patterns = []
+                        for var_pattern in pattern_variants:
+                            try:
+                                # Verify it's a valid regex
+                                re.compile(var_pattern)
+                                valid_patterns.append(var_pattern)
+                            except re.error as e:
+                                logger.warning(
+                                    f"LLM generated invalid regex: {var_pattern}. Error: {e}",
+                                    component="PatternAnalyzer"
+                                )
+                        
+                        # If we have valid patterns, return them
+                        if valid_patterns:
+                            # Make sure we don't have duplicate patterns
+                            unique_patterns = list(set(valid_patterns))
+                            # Also ensure original pattern isn't included
+                            if pattern in unique_patterns:
+                                unique_patterns.remove(pattern)
+                            return unique_patterns
+                    
+                    # If JSON parsing fails or no valid patterns, log and continue with rule-based generation
+                    logger.warning(
+                        f"Failed to extract valid regex patterns from LLM response: {generated_text}",
+                        component="PatternAnalyzer"
+                    )
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Failed to parse JSON from LLM response: {generated_text}",
+                        component="PatternAnalyzer"
+                    )
+    except Exception as e:
+        logger.error(
+            f"Error using LLM for pattern generation: {e}",
+            exc_info=True,
+            component="PatternAnalyzer"
+        )
+    
+    # Return empty list if LLM generation fails
+    return []
 
 @dataclass
 class PatternStats:
@@ -140,7 +295,7 @@ class PatternAnalyzer:
     
     @staticmethod
     def _generate_simpler_pattern(pattern: str) -> str:
-        """Generate a simpler version of a pattern.
+        """Generate a simpler version of a regex pattern.
         
         Args:
             pattern: Original pattern
@@ -148,6 +303,10 @@ class PatternAnalyzer:
         Returns:
             Simplified pattern
         """
+        # Check if pattern is None and return empty string
+        if pattern is None:
+            return ""
+            
         # Replace complex regex constructs with simpler alternatives
         simplified = pattern
         
@@ -183,30 +342,82 @@ class PatternAnalyzer:
         Returns:
             More specific pattern
         """
-        # Add more constraints to make the pattern more specific
         specific = pattern
+        original_pattern_for_error_return = pattern # Keep original for fallback
+
+        # Attempt to add word boundaries more carefully
+        try:
+            potential_words = list(re.finditer(r'\w+', specific))
+            added_boundaries = 0
+            offset = 0
+            
+            current_specific = list(specific) # Work with list for easier modification
+
+            for match in potential_words:
+                word = match.group(0)
+                start, end = match.span()
+                current_start = start + offset
+                current_end = end + offset
+
+                if len(word) > 2:
+                    # Check context directly in the current state of the pattern (as a string)
+                    temp_specific_str = "".join(current_specific)
+                    precedes_boundary = (current_start > 1 and temp_specific_str[current_start-2:current_start] == '\\b')
+                    follows_boundary = (current_end < len(temp_specific_str) -1 and temp_specific_str[current_end:current_end+2] == '\\b')
+                    
+                    inside_brackets = False
+                    # Rough check for brackets - might need refinement for nested/escaped cases
+                    open_bracket_idx = temp_specific_str.rfind('[', 0, current_start)
+                    if open_bracket_idx != -1:
+                        # Check if the corresponding closing bracket is after our word end
+                        # This simple check might fail for complex nested brackets
+                        corresponding_close = temp_specific_str.find(']', open_bracket_idx)
+                        if corresponding_close != -1 and corresponding_close >= current_end:
+                             # Further check: ensure no closing bracket between open and start
+                             if temp_specific_str.find(']', open_bracket_idx, current_start) == -1:
+                                 inside_brackets = True 
+
+                    if not precedes_boundary and not follows_boundary and not inside_brackets:
+                        replacement = f'\\b{word}\\b'
+                        # Modify the list representation
+                        current_specific[current_start:current_end] = list(replacement)
+                        offset += len(replacement) - len(word)
+                        added_boundaries += 1
+           
+            specific = "".join(current_specific) # Convert back to string
+            if added_boundaries > 0:
+                 logger.debug(f"Added word boundaries, intermediate pattern: {specific}", component="PatternAnalyzer")
+
+        except re.error as e:
+            logger.warning(f"Regex error during word boundary addition for '{pattern}': {e}. Skipping boundary addition.", component="PatternAnalyzer")
+            specific = original_pattern_for_error_return # Revert to original pattern if boundary logic failed
+        except Exception as e: # Catch potential index errors too
+             logger.warning(f"Unexpected error during word boundary addition for '{pattern}': {e}. Skipping boundary addition.", component="PatternAnalyzer")
+             specific = original_pattern_for_error_return
+
+        # Replace wildcards (unescaped dots) with more specific character classes
+        try:
+            # Use re.sub to avoid replacing escaped dots (\\.)
+            specific = re.sub(r'(?<!\\)\.', '[a-zA-Z0-9_]', specific)
+        except re.error as e:
+             logger.warning(f"Regex error during wildcard replacement for '{pattern}': {e}. Skipping wildcard replacement.", component="PatternAnalyzer")
+             # Keep the pattern state before this step
+
+        # --- Removed unconditional start/end anchor addition --- 
         
-        # Add word boundaries around words
-        if '\\b' not in specific:
-            words = re.findall(r'[a-zA-Z0-9_]+', specific)
-            for word in words:
-                if len(word) > 3:  # Only add boundaries to longer words
-                    specific = specific.replace(word, f'\\b{word}\\b')
-        
-        # Replace wildcards with more specific character classes
-        specific = specific.replace('.', '[a-zA-Z0-9_]')
-        
-        # Add start/end anchors if not present
-        if not specific.startswith('^'):
-            specific = '^' + specific
-        if not specific.endswith('$'):
-            specific = specific + '$'
-        
-        return specific
+        # Final check: Ensure the generated pattern is still valid regex
+        try:
+            re.compile(specific)
+        except re.error as e:
+            logger.warning(f"Generated specific pattern '{specific}' is invalid regex: {e}. Returning original.", component="PatternAnalyzer")
+            return original_pattern_for_error_return # Return original if specific version is invalid
+            
+        # Return the modified pattern only if it's different and valid
+        return specific if specific != original_pattern_for_error_return else original_pattern_for_error_return
     
     @staticmethod
     def _generate_pattern_variations(pattern: str, is_regex: bool) -> List[str]:
-        """Generate variations of a pattern.
+        """Generate variations of a pattern using simpler/specific versions and mutations.
         
         Args:
             pattern: Original pattern
@@ -215,43 +426,64 @@ class PatternAnalyzer:
         Returns:
             List of pattern variations
         """
-        variations = []
+        variations = set() # Use a set to avoid duplicates initially
         
         if is_regex:
-            # For regex patterns, generate variations
-            # Simpler version
-            variations.append(PatternAnalyzer._generate_simpler_pattern(pattern))
+            # 1. Generate simpler version
+            try:
+                simpler = PatternAnalyzer._generate_simpler_pattern(pattern)
+                if simpler != pattern:
+                    re.compile(simpler) # Check validity
+                    variations.add(simpler)
+            except re.error: pass
+
+            # 2. Generate more specific version
+            try:
+                specific = PatternAnalyzer._generate_more_specific_pattern(pattern)
+                if specific != pattern:
+                    re.compile(specific) # Check validity
+                    variations.add(specific)
+            except re.error: pass
+
+            # 3. Targeted Mutations
+            mutations = []
+            #   a) Swap .* and .+
+            if '.*' in pattern: mutations.append(pattern.replace('.*', '.+', 1))
+            if '.+' in pattern: mutations.append(pattern.replace('.+', '.*', 1))
             
-            # More specific version
-            variations.append(PatternAnalyzer._generate_more_specific_pattern(pattern))
-            
-            # Replace quantifiers with alternatives
-            variations.append(pattern.replace('+', '*'))
-            variations.append(pattern.replace('*', '+'))
-            
-            # Add/remove word boundaries
-            if '\\b' in pattern:
-                variations.append(pattern.replace('\\b', ''))
-            else:
-                words = re.findall(r'[a-zA-Z0-9_]+', pattern)
-                for word in words:
-                    if len(word) > 3:  # Only add boundaries to longer words
-                        variations.append(pattern.replace(word, f'\\b{word}\\b'))
+            #   b) Add/Remove specific word boundaries (example: around 'ERROR')
+            if '\\bERROR\\b' in pattern: 
+                mutations.append(pattern.replace('\\bERROR\\b', 'ERROR', 1))
+            elif 'ERROR' in pattern and not pattern.startswith('ERROR'): # Avoid adding boundary if starts with word
+                 # Check if ERROR is preceded by non-word char or start of string
+                 if re.search(r'(?<!\\w)ERROR', pattern): 
+                     mutations.append(pattern.replace('ERROR', '\\bERROR\\b', 1))
+                     
+            #   c) Change . to \s or \w (if present)
+            if '.' in pattern: 
+                mutations.append(pattern.replace('.', '\\s', 1)) # Replace first . with whitespace
+                mutations.append(pattern.replace('.', '\\w', 1)) # Replace first . with word char
+
+            # Add valid, different mutations to the set
+            for mut in mutations:
+                if mut != pattern:
+                    try:
+                        re.compile(mut) # Check validity
+                        variations.add(mut)
+                    except re.error: pass
         else:
-            # For literal patterns, generate variations
-            # Add common misspellings or variations
+            # For literal patterns (unchanged)
             words = pattern.split()
             for i, word in enumerate(words):
                 if len(word) > 3:
-                    # Add a variation with one character changed
                     for j in range(len(word)):
                         varied_word = word[:j] + '.' + word[j+1:]
                         varied_words = words.copy()
                         varied_words[i] = varied_word
-                        variations.append(' '.join(varied_words))
+                        variations.add(' '.join(varied_words))
         
-        # Remove duplicates and the original pattern
-        return [v for v in variations if v != pattern]
+        variations.discard(pattern)
+        return list(variations)
     
     @staticmethod
     def _mutate_pattern(
@@ -409,87 +641,183 @@ class PatternAnalyzer:
         is_regex: bool,
         case_sensitive: bool,
         paths: List[str],
-        reference_set: Optional[List[Tuple[str, int]]] = None
+        reference_set: Optional[Dict[str, List[str]]] = None
     ) -> PatternStats:
-        """Evaluate a pattern against a set of files.
+        """Evaluate a pattern's performance against files or a reference set.
         
         Args:
-            pattern: Pattern to evaluate
-            is_regex: Whether the pattern is a regex
-            case_sensitive: Whether the pattern is case-sensitive
-            paths: Paths to search
-            reference_set: Optional reference set of (file, line) locations
+            pattern: The pattern string to evaluate.
+            is_regex: Whether the pattern is a regular expression.
+            case_sensitive: Whether the pattern matching should be case-sensitive.
+            paths: List of file paths to search (used if reference_set is None or file-based).
+            reference_set: An optional dictionary containing 'positive' and 'negative'
+                        lists of example strings to evaluate against. If provided,
+                        metrics are calculated based on these examples. Otherwise,
+                        metrics might be calculated based on file search results
+                        (though this part needs refinement).
             
         Returns:
-            Statistics for the pattern
+            PatternStats containing performance metrics.
         """
-        # Create search parameters
-        params = RipgrepSearchParams(
-            pattern=pattern,
-            paths=paths,
-            regex=is_regex,
-            case_sensitive=case_sensitive,
-            context_lines=0,
-        )
-        
         start_time = time.time()
         
-        # Execute the search
-        try:
-            result = await ripgrep_search(params)
-        except Exception as e:
+        # Check for None pattern
+        if pattern is None:
             logger.error(
-                f"Pattern evaluation failed: {str(e)}",
-                component="evolution",
-                operation="evaluate_pattern",
-                exception=e,
-                context={"pattern": pattern}
+                "Error evaluating pattern 'None': first argument must be string or compiled pattern",
+                component="patternanalyzer",
+                operation="evaluate_pattern"
             )
+            # Return default stats for None pattern
+            return PatternStats(pattern="None")
             
-            # Return empty stats
-            return PatternStats(
-                pattern=pattern,
-                execution_time=time.time() - start_time
-            )
+        stats = PatternStats(pattern=pattern)
         
-        execution_time = time.time() - start_time
-        
-        # Extract match locations
-        matches = result.matches
-        match_locations = [(m.path, m.line_number) for m in matches]
-        
-        # Count unique files with matches
-        files_with_matches = len(set(m.path for m in matches))
-        
-        # Calculate false positives and false negatives if reference set is provided
+        true_positives = 0
         false_positives = 0
         false_negatives = 0
+        total_relevant = 0 # Total positive examples
         
-        if reference_set:
-            reference_locations = set(reference_set)
-            result_locations = set(match_locations)
+        try:
+            # Compile regex pattern
+            flags = 0 if case_sensitive else re.IGNORECASE
+            if not is_regex:
+                pattern = re.escape(pattern) # Treat non-regex as literal strings
             
-            # False positives: in results but not in reference
-            false_positives = len(result_locations - reference_locations)
-            
-            # False negatives: in reference but not in results
-            false_negatives = len(reference_locations - result_locations)
-        
-        # Create pattern stats
-        stats = PatternStats(
-            pattern=pattern,
-            total_matches=len(matches),
-            files_with_matches=files_with_matches,
-            match_locations=match_locations,
-            false_positives=false_positives,
-            false_negatives=false_negatives,
-            execution_time=execution_time,
+            compiled_pattern = re.compile(pattern, flags)
+
+            if reference_set and isinstance(reference_set, dict):
+                positive_examples = reference_set.get("positive", [])
+                negative_examples = reference_set.get("negative", [])
+                total_relevant = len(positive_examples)
+
+                # Evaluate against positive examples
+                logger.debug(f"Evaluating pattern against positive examples: '{pattern}'", component="PatternAnalyzer", operation="evaluate_pattern")
+                for i, example in enumerate(positive_examples):
+                    match = compiled_pattern.search(example)
+                    if match:
+                        true_positives += 1
+                        logger.debug(f"  Pos[{i}] MATCH: '{example}'", component="PatternAnalyzer", operation="evaluate_pattern")
+                    else:
+                        false_negatives += 1
+                        logger.debug(f"  Pos[{i}] NO MATCH: '{example}'", component="PatternAnalyzer", operation="evaluate_pattern")
+                
+                # Evaluate against negative examples
+                logger.debug(f"Evaluating pattern against negative examples: '{pattern}'", component="PatternAnalyzer", operation="evaluate_pattern")
+                for i, example in enumerate(negative_examples):
+                    match = compiled_pattern.search(example)
+                    if match:
+                        false_positives += 1
+                        logger.debug(f"  Neg[{i}] MATCH (FP): '{example}'", component="PatternAnalyzer", operation="evaluate_pattern")
+                    else:
+                        logger.debug(f"  Neg[{i}] NO MATCH: '{example}'", component="PatternAnalyzer", operation="evaluate_pattern")
+                        
+                # Update stats based on example evaluation
+                stats.total_matches = true_positives + false_positives # Total times the pattern matched anything in the reference set
+                stats.false_positives = false_positives
+                # Note: stats.false_negatives is not directly used by calculate_metrics, 
+                # it uses total_relevant and true_positives instead.
+                
+                # We don't have file/line locations when evaluating examples directly
+                stats.files_with_matches = 0 
+                stats.match_locations = []
+
+            else:
+                # --- Original file-based evaluation (kept for potential future use, but needs review) ---
+                # This part assumes reference_set is List[Tuple[str, int]] if not the dict type.
+                # This logic might need significant rework if file-based evaluation against 
+                # a ground-truth reference set is required alongside string-based evaluation.
+                logger.warning(
+                    "File-based evaluation with ground truth locations is not fully implemented "
+                    "alongside string-based reference sets. Metrics might be inaccurate.",
+                    component="PatternAnalyzer",
+                    operation="evaluate_pattern"
+                )
+
+                # Example: Use ripgrep if paths are provided (needs reference_set adaptation)
+                if paths:
+                    search_params = {
+                        "pattern": pattern,
+                        "paths": paths,
+                        "regex": is_regex, # Use the original is_regex flag
+                        "case_sensitive": case_sensitive,
+                        "stats": True, # Request stats from ripgrep
+                        "json_output": True, # Need JSON for parsing
+                    }
+                    rg_result = await ripgrep_search(**search_params)
+                    
+                    if rg_result and "data" in rg_result:
+                        rg_matches = rg_result["data"].get("matches", [])
+                        rg_stats = rg_result["data"].get("stats", {})
+                        
+                        stats.total_matches = rg_stats.get("total_matches", len(rg_matches))
+                        stats.files_with_matches = rg_stats.get("files_with_matches", 0)
+                        stats.match_locations = [
+                            (match.get("path", "N/A"), match.get("line_number", 0)) 
+                            for match in rg_matches
+                        ]
+                        
+                        # Placeholder: False positive/negative calculation for file search needs ground truth
+                        # If reference_set was meant to be file locations:
+                        # reference_locations = set(reference_set) if reference_set else set()
+                        # for match in rg_matches:
+                        #     match_loc = (match.get("path"), match.get("line_number"))
+                        #     if reference_locations and match_loc not in reference_locations:
+                        #         stats.false_positives += 1
+                        # total_relevant = len(reference_locations) if reference_locations else 0
+                        # current_true_positives = stats.total_matches - stats.false_positives
+                        # false_negatives = total_relevant - current_true_positives
+
+                # Fallback if no reference set and no paths or ripgrep fails
+                else:
+                    stats.total_matches = 0
+                    stats.files_with_matches = 0
+                    stats.false_positives = 0
+                    total_relevant = 0 # Cannot determine relevance without ground truth
+                    
+                    # Assign default metrics if no evaluation possible
+                    stats.precision = 0.0
+                    stats.recall = 0.0
+                    stats.f1_score = 0.0
+                    stats.execution_time = time.time() - start_time
+                    return stats # Return early as metrics can't be calculated
+
+            # Calculate metrics using the dedicated method
+            stats.calculate_metrics(total_relevant=total_relevant)
+
+        except re.error as e:
+            logger.error(
+                f"Invalid regex pattern: {pattern}. Error: {e}",
+                component="PatternAnalyzer",
+                operation="evaluate_pattern",
+                exception=e
+            )
+            # Set stats to indicate failure
+            stats.precision = 0.0
+            stats.recall = 0.0
+            stats.f1_score = 0.0
+            stats.total_matches = 0
+            stats.false_positives = 0
+        except Exception as e:
+            logger.error(
+                f"Error evaluating pattern '{pattern}': {e}",
+                exception=e,
+                component="PatternAnalyzer",
+                operation="evaluate_pattern"
+            )
+            stats.precision = 0.0
+            stats.recall = 0.0
+            stats.f1_score = 0.0
+
+        stats.execution_time = time.time() - start_time
+        logger.debug(
+            f"Evaluated pattern '{pattern}'. "
+            f"TP:{true_positives}, FP:{false_positives}, FN:{false_negatives}, TotalRelevant:{total_relevant}. "
+            f"Precision: {stats.precision:.4f}, Recall: {stats.recall:.4f}, F1: {stats.f1_score:.4f}. "
+            f"Time: {stats.execution_time:.3f}s",
+            component="PatternAnalyzer",
+            operation="evaluate_pattern"
         )
-        
-        # Calculate metrics
-        if reference_set:
-            stats.calculate_metrics(len(reference_set))
-        
         return stats
     
     async def analyze_pattern(
@@ -499,11 +827,11 @@ class PatternAnalyzer:
         is_regex: bool,
         case_sensitive: bool,
         paths: List[str],
-        reference_set: Optional[List[Tuple[str, int]]] = None,
+        reference_set: Optional[Dict[str, List[str]]] = None,
         generate_variants: bool = True,
         num_variants: int = 3,
     ) -> Dict[str, Any]:
-        """Analyze a pattern and optionally generate variations.
+        """Analyze a pattern and generate variations.
         
         Args:
             pattern: Pattern to analyze
@@ -511,16 +839,59 @@ class PatternAnalyzer:
             is_regex: Whether the pattern is a regex
             case_sensitive: Whether the pattern is case-sensitive
             paths: Paths to search
-            reference_set: Optional reference set of (file, line) locations
+            reference_set: Optional dictionary with 'positive' and 'negative' example strings.
             generate_variants: Whether to generate variants
             num_variants: Number of variants to generate
             
         Returns:
             Analysis results
         """
-        # Create a pattern ID
-        import hashlib
-        pattern_id = hashlib.md5(pattern.encode()).hexdigest()
+        operation_start_time = time.time()
+        logger.info(
+            f"Analyzing pattern: {pattern}",
+            component="PatternAnalyzer",
+            context={
+                "is_regex": is_regex,
+                "case_sensitive": case_sensitive,
+                "paths_count": len(paths) if paths else 0,
+            }
+        )
+        
+        # Initialize variant_patterns list and best_pattern_in_variants
+        variant_patterns = []
+        best_pattern_in_variants = pattern
+        
+        # Validate pattern input
+        if pattern is None or pattern.strip() == "":
+            logger.warning("Empty or None pattern provided to analyze_pattern", component="PatternAnalyzer")
+            return {
+                "error": "Pattern is empty or None",
+                "status": "error",
+                "pattern": pattern,
+                "variations": [],
+                "stats": None,
+                "execution_time": 0.0
+            }
+            
+        # Create a pattern ID if we want to track history
+        pattern_id = str(uuid.uuid4())
+        
+        # If LLM pattern generation is enabled and we have reference sets, use LLM
+        llm_used = False
+        rule_based_variations = []
+        llm_variations = []
+        
+        # First evaluate the original pattern
+        original_stats = await self.evaluate_pattern(
+            pattern=pattern,
+            is_regex=is_regex,
+            case_sensitive=case_sensitive,
+            paths=paths,
+            reference_set=reference_set,
+        )
+        
+        # Store the stats
+        self.pattern_stats[pattern] = original_stats
         
         # Log the operation
         logger.info(
@@ -532,20 +903,10 @@ class PatternAnalyzer:
                 "pattern": pattern,
                 "is_regex": is_regex,
                 "generate_variants": generate_variants,
+                "llm_enabled": USE_LLM_PATTERN_GENERATION,
+                "reference_set_type": type(reference_set).__name__ if reference_set else None
             }
         )
-        
-        # Evaluate the pattern
-        stats = await self.evaluate_pattern(
-            pattern=pattern,
-            is_regex=is_regex,
-            case_sensitive=case_sensitive,
-            paths=paths,
-            reference_set=reference_set,
-        )
-        
-        # Store the stats
-        self.pattern_stats[pattern] = stats
         
         # Initialize variant list if needed
         if pattern_id not in self.pattern_variants:
@@ -558,7 +919,7 @@ class PatternAnalyzer:
             description=description,
             is_regex=is_regex,
             case_sensitive=case_sensitive,
-            stats=stats,
+            stats=original_stats,
         )
         
         # Add to variants and history
@@ -566,11 +927,62 @@ class PatternAnalyzer:
         self.pattern_history[pattern_id].append(base_variant)
         
         # Generate variants if requested
-        variant_results = []
-        
-        if generate_variants and num_variants > 0:
-            # Generate variations of the pattern
-            variations = self._generate_pattern_variations(pattern, is_regex)
+        if generate_variants:
+            variant_patterns = []
+            llm_used = False
+
+            # Use LLM for generation if we have a reference set and description
+            if reference_set and description and hasattr(self, "_generate_llm_variations"):
+                try:
+                    llm_used = True
+                    llm_variations = await generate_patterns_with_llm(pattern, description, reference_set, num_variants)
+                    logger.info(
+                        f"LLM generation produced {len(llm_variations)} pattern variants",
+                        component="PatternAnalyzer",
+                        operation="analyze_pattern"
+                    )
+                    variant_patterns.extend(llm_variations)
+                except Exception as e:
+                    logger.error(
+                        f"Error during LLM pattern generation: {str(e)}",
+                        component="PatternAnalyzer",
+                        operation="analyze_pattern",
+                        exception=e
+                    )
+                    # Fall back to rule-based generation
+                    llm_used = False
+                    
+            # Use rule-based generation as a fallback or if LLM is disabled
+            if not llm_used:
+                # Handle the case where pattern is None gracefully
+                if pattern is None:
+                    logger.warning(
+                        "Cannot generate variations for None pattern",
+                        component="PatternAnalyzer",
+                        operation="analyze_pattern"
+                    )
+                    rule_based_variations = []
+                else:
+                    try:
+                        rule_based_variations = self._generate_pattern_variations(pattern, is_regex)
+                        logger.info(
+                            f"Rule-based generation produced {len(rule_based_variations)} pattern variants",
+                            component="PatternAnalyzer",
+                            operation="analyze_pattern"
+                        )
+                        variant_patterns.extend(rule_based_variations)
+                    except Exception as e:
+                        logger.error(
+                            f"Error during rule-based pattern generation: {str(e)}",
+                            component="PatternAnalyzer",
+                            operation="analyze_pattern",
+                            exception=e
+                        )
+                        # Continue with an empty list of variations
+                        rule_based_variations = []
+            
+            # Combine variations (LLM takes precedence if available)
+            variations = llm_variations + rule_based_variations
             
             # Evaluate each variation
             for i, var_pattern in enumerate(variations[:num_variants]):
@@ -579,7 +991,8 @@ class PatternAnalyzer:
                     continue
                     
                 # Generate a description for the variant
-                var_description = f"Variant {i+1} of '{description}'"
+                source = "LLM" if var_pattern in llm_variations else "Rule-based"
+                var_description = f"Variant {i+1} of '{description}' ({source})"
                 
                 # Evaluate the variant
                 var_stats = await self.evaluate_pattern(
@@ -605,7 +1018,7 @@ class PatternAnalyzer:
                 self.pattern_history[pattern_id].append(variant)
                 
                 # Add to results
-                variant_results.append({
+                variant_patterns.append({
                     "pattern": var_pattern,
                     "description": var_description,
                     "is_regex": is_regex,
@@ -620,9 +1033,14 @@ class PatternAnalyzer:
                     },
                     "score": variant.score,
                 })
-        
-        # Sort variants by score
-        self.pattern_variants[pattern_id].sort(key=lambda v: v.score, reverse=True)
+            
+            # Update best pattern if we have variants
+            if variant_patterns:
+                # Sort variants by score
+                sorted_variants = sorted(variant_patterns, key=lambda x: x["score"], reverse=True)
+                best_pattern_in_variants = sorted_variants[0]["pattern"]
+            
+        operation_execution_time = time.time() - operation_start_time # Total time for the operation
         
         # Create result
         result = {
@@ -632,16 +1050,16 @@ class PatternAnalyzer:
             "is_regex": is_regex,
             "case_sensitive": case_sensitive,
             "stats": {
-                "total_matches": stats.total_matches,
-                "files_with_matches": stats.files_with_matches,
-                "precision": stats.precision,
-                "recall": stats.recall,
-                "f1_score": stats.f1_score,
-                "execution_time": stats.execution_time,
+                "total_matches": original_stats.total_matches,
+                "files_with_matches": original_stats.files_with_matches,
+                "precision": original_stats.precision,
+                "recall": original_stats.recall,
+                "f1_score": original_stats.f1_score,
+                "execution_time": original_stats.execution_time,
             },
-            "variants": variant_results,
-            "best_pattern": self.pattern_variants[pattern_id][0].pattern
-            if self.pattern_variants[pattern_id] else pattern,
+            "variants": variant_patterns,
+            "best_pattern": best_pattern_in_variants,
+            "execution_time": operation_execution_time,
         }
         
         # Log completion
@@ -651,8 +1069,9 @@ class PatternAnalyzer:
             operation="analyze_pattern",
             context={
                 "pattern_id": pattern_id,
-                "matches": stats.total_matches,
-                "variant_count": len(variant_results),
+                "matches": original_stats.total_matches,
+                "variant_count": len(variant_patterns),
+                "llm_used": llm_used
             }
         )
         
@@ -1028,7 +1447,7 @@ async def analyze_pattern(
     is_regex: bool,
     case_sensitive: bool,
     paths: List[str],
-    reference_set: Optional[List[Tuple[str, int]]] = None,
+    reference_set: Optional[Dict[str, List[str]]] = None,
     generate_variants: bool = True,
     num_variants: int = 3,
 ) -> Dict[str, Any]:
@@ -1041,14 +1460,26 @@ async def analyze_pattern(
         description: Description of the pattern
         is_regex: Whether the pattern is a regex
         case_sensitive: Whether the pattern is case-sensitive
-        paths: Paths to search
-        reference_set: Optional reference set of (file, line) locations
+        paths: Paths to search (used if reference_set doesn't provide examples)
+        reference_set: Optional dictionary with 'positive' and 'negative' example strings.
         generate_variants: Whether to generate variants
         num_variants: Number of variants to generate
         
     Returns:
         Analysis results
     """
+    # Validate pattern input
+    if pattern is None or pattern.strip() == "":
+        logger.warning("Empty or None pattern provided to analyze_pattern", component="PatternAnalyzer")
+        return {
+            "error": "Pattern is empty or None",
+            "status": "error",
+            "pattern": pattern,
+            "variations": [],
+            "stats": None,
+            "execution_time": 0.0
+        }
+        
     analyzer = get_pattern_analyzer()
     
     return await analyzer.analyze_pattern(

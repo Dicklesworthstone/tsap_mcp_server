@@ -14,8 +14,11 @@ from rich.table import Table
 from rich.syntax import Syntax
 from rich.console import Console
 from rich.rule import Rule
+from rich.progress import Progress
+from typing import Dict, Any, List, Optional
 
-from mcp_client_example import MCPClient
+# Import MCPClient from the library instead of the example file
+from tsap.mcp import MCPClient
 
 console = Console()
 

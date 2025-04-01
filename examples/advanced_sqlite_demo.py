@@ -2,61 +2,27 @@
 """
 Advanced SQLite Demo
 
-This script demonstrates the comprehensive features of the SQLite integration
-in TSAP by creating, querying, and analyzing databases in various ways.
-It also shows how SQLite can be used synergistically with ripgrep for more
-powerful data analysis workflows.
+This script demonstrates the comprehensive features of the SQLite Query
+tool in TSAP, including various query types, schema inspection,
+and data manipulation.
 """
 import asyncio
-import os
-import sys
 import json
+import os
+import re
 import sqlite3
-from datetime import datetime
+import tempfile
+import sys
+from pathlib import Path
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
-from rich.console import Console
 from rich.rule import Rule
+from typing import Dict, Any, List, Optional, Union
 
-# Assuming the MCPClient is in the examples directory
-from mcp_client_example import MCPClient
-
-# Add the SQLite client method to MCPClient
-async def sqlite_query(
-    self,
-    query: str,
-    database: str,
-    params: list = None,
-    mode: str = "dict",
-    headers: bool = True,
-) -> dict:
-    """Execute a SQLite query.
-    
-    Args:
-        query: The SQL query to execute
-        database: Path to the SQLite database file
-        params: Optional list of query parameters (for parameterized queries)
-        mode: Result mode - "list", "dict", or "table"
-        headers: Whether to include column headers in the result
-        
-    Returns:
-        Query results
-    """
-    args = {
-        "query": query,
-        "database": database,
-        "mode": mode,
-        "headers": headers
-    }
-    
-    if params is not None:
-        args["params"] = params
-        
-    return await self.send_request("sqlite_query", args)
-
-# Add the method to the MCPClient class
-MCPClient.sqlite_query = sqlite_query
+# Import the MCP client from the library
+from tsap.mcp import MCPClient, DEFAULT_SERVER_URL
 
 console = Console()
 
@@ -818,132 +784,135 @@ async def run_performance_optimization_demo(client, database):
         show_title=False
     )
 
-async def run_demo(client, title, description, **query_params):
-    """Run a SQLite query demo with the given parameters."""
-    # Whether to show the title (defaults to True)
-    show_title = query_params.pop("show_title", True)
+async def run_demo(
+    client,
+    title,
+    description,
+    query: str,
+    database: str,
+    params: Optional[List[Any]] = None,
+    mode: Optional[str] = None,
+    show_title: bool = True,
+    **kwargs
+):
+    """Execute a SQL query and display the results.
     
+    Args:
+        client: The MCPClient instance
+        title: Title for the demo section (optional)
+        description: Description text for the demo (optional)
+        query: SQL query to execute
+        database: Path to the database file
+        params: Optional parameters for the query
+        mode: Optional result format mode (list, dict, table)
+        show_title: Whether to show the title/description
+        **kwargs: Additional parameters for the query
+    """
     if show_title and title:
-        console.print(Rule(f"[bold yellow]{title}[/bold yellow]"))
-        
-    if description:
-        console.print(f"[italic]{description}[/italic]\n")
-    
-    # Show the query parameters
-    console.print("[bold cyan]Query Parameters:[/bold cyan]")
-    params_table = Table(show_header=False, box=None)
-    params_table.add_column("Parameter", style="green")
-    params_table.add_column("Value", style="white")
-    
-    # Extract params if present to handle them specially
-    params = query_params.pop("params", None)
-    
-    for key, value in query_params.items():
-        # Skip our internal parameter
-        if key == "show_title":
-            continue
-        
-        # Format the value for display
-        if key == "query":
-            # Show query over multiple lines with syntax highlighting
-            console.print("[bold cyan]SQL Query:[/bold cyan]")
-            console.print(Syntax(value, "sql", theme="monokai"))
-            continue
-            
-        params_table.add_row(key, str(value))
-    
-    # Add params back for display
-    if params:
-        params_table.add_row("params", str(params))
-    
-    console.print(params_table)
-    console.print()
-    
-    # Add params back to query_params for the API call
-    if params:
-        query_params["params"] = params
-    
-    # Execute the query
-    start_time = datetime.now()
-    console.print("[bold]Executing query...[/bold]")
+        console.print(f"[bold]{title}[/bold]")
+    if show_title and description:
+        console.print(f"[italic]{description}[/italic]")
     
     try:
-        response = await client.sqlite_query(**query_params)
+        # Execute the query
+        response = await client.sqlite_query(
+            query=query,
+            database=database,
+            parameters=params,
+            **kwargs
+        )
+        
+        # Check if successful
+        if response.get("status") != "success":
+            error = response.get("error", {})
+            error_msg = error.get("message", "Unknown error")
+            console.print(f"[bold red]Error executing query: {error_msg}[/bold red]")
+            return
+        
+        # Get the data from response
+        data = response.get("data", {})
+        
+        # Display the results based on mode
+        if mode == "table" and "columns" in data and "rows" in data:
+            # Create a Rich table
+            table = Table()
+            for col in data["columns"]:
+                table.add_column(str(col))
+            
+            for row in data["rows"]:
+                table.add_row(*[str(val) for val in row])
+            
+            console.print(table)
+        else:
+            # Default display
+            if "columns" in data and "rows" in data:
+                columns = data["columns"]
+                rows = data["rows"]
+                
+                console.print(f"[bold]Results: {len(rows)} rows[/bold]")
+                for i, row in enumerate(rows):
+                    if i < 10:  # Limit display to first 10 rows
+                        # Format as a simple table structure
+                        console.print(f"Row {i+1}: {row}")
+                if len(rows) > 10:
+                    console.print(f"... and {len(rows) - 10} more rows")
+                
+        # Display execution time if available
+        if "execution_time" in data:
+            console.print(f"[dim]Execution time: {data['execution_time']:.4f}s[/dim]")
+    
     except Exception as e:
-        console.print(f"[bold red]Error during client.sqlite_query call: {e}[/bold red]")
+        console.print(f"[bold red]Error in run_demo: {str(e)}[/bold red]")
         import traceback
         console.print(traceback.format_exc())
-        response = {"error": {"code": "CLIENT_SIDE_ERROR", "message": str(e)}}
+
+async def run_main_demo(client: MCPClient):
+    """Run the SQLite demo."""
+    console.print(Panel("[bold blue]TSAP SQLite Query Advanced Demo[/bold blue]", subtitle="Demonstrating SQLite database interactions"))
     
-    # Calculate execution time
-    execution_time = (datetime.now() - start_time).total_seconds()
+    # Create a temporary database for testing
+    db_path = os.path.join(tempfile.gettempdir(), "tsap_sqlite_demo.db")
+    console.print(f"Using database path: {db_path}")
     
-    # Debug the response
-    debug_print(f"Response structure: {str(response.keys())}")
+    # Create a simple database file if it doesn't exist
+    if not os.path.exists(db_path):
+        console.print(f"Creating new SQLite database at {db_path}")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, name TEXT)")
+        cursor.execute("INSERT INTO test (name) VALUES ('test_entry')")
+        conn.commit()
+        conn.close()
     
-    # Process and display results
-    if response.get("status") == "success" and "data" in response:
-        data = response["data"]
-        # Show summary statistics
-        console.print(f"[green]Query completed in {execution_time:.3f} seconds[/green]")
+    # Make sure the database file exists and is accessible
+    try:
+        # Test basic connectivity with a simple query
+        console.print("\n[bold]Testing SQLite connectivity...[/bold]")
         
-        if "rows" in data:
-            rows = data["rows"]
-            row_count = len(rows)
-            
-            # Show the command that was executed
-            if "columns" in data and data["columns"]:
-                columns = data["columns"]
-                
-                # Display results in a table
-                if row_count > 0:
-                    results_table = Table(title=f"Query Results ({row_count} rows)")
-                    
-                    # Add columns
-                    for column in columns:
-                        results_table.add_column(column, style="cyan")
-                    
-                    # Add rows to the table (max 15 for readability)
-                    max_display = min(15, row_count)
-                    
-                    # Handle different result formats
-                    mode = query_params.get("mode", "dict")  # noqa: F841
-                    
-                    for i in range(max_display):
-                        if i >= len(rows):
-                            break
-                            
-                        row = rows[i]
-                        if isinstance(row, dict):
-                            # Dict mode
-                            results_table.add_row(*[str(row.get(col, "")) for col in columns])
-                        elif isinstance(row, (list, tuple)):
-                            # List mode
-                            results_table.add_row(*[str(val) for val in row])
-                        else:
-                            # Unknown format
-                            results_table.add_row(str(row))
-                    
-                    console.print(results_table)
-                    
-                    if row_count > 15:
-                        console.print(f"[dim]... and {row_count - 15} more rows not shown[/dim]")
-                else:
-                    console.print("[yellow]Query returned 0 rows[/yellow]")
+        test_response = await client.sqlite_query(
+            query="SELECT sqlite_version() AS version",
+            database=db_path
+        )
+        
+        if test_response.get("status") == "success":
+            data = test_response.get("data", {})
+            if "rows" in data and data["rows"]:
+                # The rows are returned as a list of lists, not a list of dicts
+                # First row, first column contains the version
+                console.print(f"[green]Connected to SQLite version: {data['rows'][0][0]}[/green]")
             else:
-                # No columns returned, just show raw data
-                console.print("[bold cyan]Raw Results:[/bold cyan]")
-                console.print(Syntax(json.dumps(rows, indent=2), "json", theme="monokai"))
+                console.print("[yellow]Connected to SQLite, but no version data returned[/yellow]")
+                console.print(f"Response data: {data}")
         else:
-            console.print("[yellow]Query successful but no rows returned[/yellow]")
-    else:
-        if "error" in response:
-            console.print(f"[bold red]Query failed with error: {response.get('error', {}).get('message', 'Unknown error')}[/bold red]")
-        else:
-            console.print("[bold red]Query failed or returned no data[/bold red]")
-            debug_print(f"Full response: {response}")
-    
-    console.print("\n")  # Add space between demos
+            error = test_response.get("error", {})
+            error_msg = error.get("message", "Unknown error")
+            console.print(f"[bold red]Error connecting to SQLite: {error_msg}[/bold red]")
+            return
+    except Exception as e:
+        console.print(f"[bold red]Error during connectivity test: {str(e)}[/bold red]")
+        import traceback
+        console.print(traceback.format_exc())
+        return
 
 if __name__ == "__main__":
     if "--debug" in sys.argv:
@@ -951,6 +920,7 @@ if __name__ == "__main__":
         debug_print("Debug mode enabled")
     
     try:
+        debug_print("Creating MCPClient...")
         asyncio.run(sqlite_demo())
     except KeyboardInterrupt:
         console.print("[yellow]Demo interrupted by user[/yellow]")

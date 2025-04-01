@@ -299,19 +299,24 @@ class PatternLibrary:
         self._add_pattern(CODE_PATTERNS["class_definition"])
         self._add_pattern(CODE_PATTERNS["import_statement"])
         self._add_pattern(CODE_PATTERNS["todo_comment"])
+        self._add_pattern(CODE_PATTERNS["error_handling"])
         
         # Add security patterns
         self._add_pattern(SECURITY_PATTERNS["api_key"])
         self._add_pattern(SECURITY_PATTERNS["password"])
         self._add_pattern(SECURITY_PATTERNS["sql_injection"])
+        self._add_pattern(SECURITY_PATTERNS["insecure_hash"])
         
         # Add documentation patterns
         self._add_pattern(DOCUMENTATION_PATTERNS["docstring"])
         self._add_pattern(DOCUMENTATION_PATTERNS["markdown_heading"])
+        self._add_pattern(DOCUMENTATION_PATTERNS["code_comment"])
         
         # Add configuration patterns
         self._add_pattern(CONFIGURATION_PATTERNS["env_var"])
         self._add_pattern(CONFIGURATION_PATTERNS["json_config"])
+        self._add_pattern(CONFIGURATION_PATTERNS["yaml_config"])
+        self._add_pattern(CONFIGURATION_PATTERNS["ini_config"])
     
     def _add_pattern(self, pattern: PatternDefinition) -> None:
         """
@@ -632,7 +637,9 @@ CODE_PATTERNS = {
         tags=["python", "function", "definition"],
         examples=[
             "def hello_world():",
-            "def process_data(input_file: str, options: Dict) -> List[str]:"
+            "def process_data(input_file: str, options: Dict) -> List[str]:",
+            "def calculate_total(items: List[Item], tax_rate: float = 0.1) -> float:",
+            "async def fetch_data(url: str, timeout: int = 30) -> Dict[str, Any]:"
         ]
     ),
     "class_definition": PatternDefinition(
@@ -644,7 +651,9 @@ CODE_PATTERNS = {
         tags=["python", "class", "definition"],
         examples=[
             "class MyClass:",
-            "class DataProcessor(BaseProcessor):"
+            "class DataProcessor(BaseProcessor):",
+            "class UserManager(metaclass=Singleton):",
+            "class AsyncDatabaseConnection(ABC):"
         ]
     ),
     "import_statement": PatternDefinition(
@@ -657,7 +666,10 @@ CODE_PATTERNS = {
         examples=[
             "import os",
             "from typing import Dict, List, Any",
-            "import numpy as np"
+            "import numpy as np",
+            "from datetime import datetime, timezone",
+            "from .models import User, Profile",
+            "import pandas as pd, matplotlib.pyplot as plt"
         ]
     ),
     "todo_comment": PatternDefinition(
@@ -669,7 +681,22 @@ CODE_PATTERNS = {
         tags=["todo", "comment"],
         examples=[
             "# TODO: Fix this bug",
-            "    # TODO: Implement error handling"
+            "    # TODO: Implement error handling",
+            "# TODO: Add input validation",
+            "# TODO: Optimize performance for large datasets"
+        ]
+    ),
+    "error_handling": PatternDefinition(
+        name="Error Handling",
+        pattern=r"try\s*:[\s\S]*?except\s+(?:\([^)]+\)|[^:]+):",
+        description="Find error handling blocks in Python code",
+        category=PatternCategory.CODE,
+        subcategory="python",
+        multiline=True,
+        tags=["python", "error", "exception"],
+        examples=[
+            "try:\n    result = process_data()\nexcept Exception as e:\n    logger.error(e)",
+            "try:\n    with open(file) as f:\n        data = f.read()\nexcept (IOError, OSError) as e:\n    print(f'Error: {e}')"
         ]
     )
 }
@@ -687,7 +714,9 @@ SECURITY_PATTERNS = {
         tags=["security", "api", "key", "credentials"],
         examples=[
             'api_key = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"',
-            'API_TOKEN="a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"'
+            'API_TOKEN="a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"',
+            'secret_key = "sk_live_51H7J8K9L0M1N2O3P4Q5R6S7T8U9V0W1X2Y3Z4"',
+            'jwt_secret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"'
         ]
     ),
     "password": PatternDefinition(
@@ -700,7 +729,9 @@ SECURITY_PATTERNS = {
         tags=["security", "password", "credentials"],
         examples=[
             'password = "supersecret"',
-            'pwd="p@ssw0rd123"'
+            'pwd="p@ssw0rd123"',
+            'db_password = "Admin@123!"',
+            'root_password: "Root@2023#"'
         ]
     ),
     "sql_injection": PatternDefinition(
@@ -713,7 +744,24 @@ SECURITY_PATTERNS = {
         tags=["security", "sql", "injection"],
         examples=[
             'cursor.execute("SELECT * FROM users WHERE id = " + user_id)',
-            'query = f"SELECT * FROM users WHERE username = \'{username}\'"'
+            'query = f"SELECT * FROM users WHERE username = \'{username}\'"',
+            'db.execute("UPDATE users SET status = " + status + " WHERE id = " + id)',
+            'sql = f"INSERT INTO logs (user, action) VALUES (\'{user}\', \'{action}\')"'
+        ]
+    ),
+    "insecure_hash": PatternDefinition(
+        name="Insecure Hash Function",
+        pattern=r"(?:md5|sha1)\s*\(\s*[\"\'][^\"\']+[\"\']\s*\)",
+        description="Find usage of cryptographically weak hash functions",
+        category=PatternCategory.SECURITY,
+        subcategory="crypto",
+        priority=PatternPriority.HIGH,
+        tags=["security", "crypto", "hash"],
+        examples=[
+            'hash_value = md5("password123")',
+            'file_hash = sha1(file_content)',
+            'checksum = md5("sensitive_data")',
+            'digest = sha1(user_input)'
         ]
     )
 }
@@ -731,7 +779,9 @@ DOCUMENTATION_PATTERNS = {
         tags=["python", "docstring", "documentation"],
         examples=[
             '"""This is a docstring."""',
-            '    """Multi-line\n    docstring\n    example."""'
+            '    """Multi-line\n    docstring\n    example."""',
+            '"""Calculate the total price including tax.\n\nArgs:\n    price: Base price\n    tax_rate: Tax rate (0-1)\n\nReturns:\n    Total price with tax\n"""',
+            "'''Process user data and generate report.\n\nThis function handles data validation,\nformatting, and report generation.\n'''"
         ]
     ),
     "markdown_heading": PatternDefinition(
@@ -743,7 +793,23 @@ DOCUMENTATION_PATTERNS = {
         tags=["markdown", "heading", "documentation"],
         examples=[
             "# Heading Level 1",
-            "### Heading Level 3"
+            "### Heading Level 3",
+            "## Project Setup",
+            "#### Configuration Options"
+        ]
+    ),
+    "code_comment": PatternDefinition(
+        name="Code Comment",
+        pattern=r"(?:^|\s)#\s+[^#\n]+",
+        description="Find descriptive code comments",
+        category=PatternCategory.DOCUMENTATION,
+        subcategory="comments",
+        tags=["comment", "documentation"],
+        examples=[
+            "# Initialize database connection",
+            "    # Process each item in the batch",
+            "# Validate input parameters",
+            "    # Handle edge cases"
         ]
     )
 }
@@ -760,12 +826,14 @@ CONFIGURATION_PATTERNS = {
         tags=["configuration", "environment", "variable"],
         examples=[
             'os.getenv("API_KEY")',
-            'os.environ.get("DATABASE_URL", default_url)'
+            'os.environ.get("DATABASE_URL", default_url)',
+            'dotenv.get_key(".env", "SECRET_KEY")',
+            'os.environ.get("DEBUG_MODE", "False")'
         ]
     ),
     "json_config": PatternDefinition(
         name="JSON Configuration",
-        pattern=r"with\s+open\s*\(\s*(?:\"|\')(?:[^\"\']*/)*([^\"\']*)(?:\"|\')(?:\s*,\s*(?:\"|\')r(?:\"|\')))?\s*as\s+[^:]+:\s*\n\s*(?:config|settings|conf)\s*=\s*json\.load",
+        pattern=r"with\s+open\s*\(\s*[\"']([^\"']+)[\"'](?:\s*,\s*[\"']r[\"'])?\s*as\s+[^:]+:\s*\n\s*(?:config|settings|conf)\s*=\s*json\.load",
         description="Find JSON configuration file loading",
         category=PatternCategory.CONFIGURATION,
         subcategory="json",
@@ -773,7 +841,35 @@ CONFIGURATION_PATTERNS = {
         tags=["configuration", "json", "file"],
         examples=[
             'with open("config.json") as f:\n    config = json.load(f)',
-            'with open("./settings/app_config.json", "r") as config_file:\n    settings = json.load(config_file)'
+            'with open("./settings/app_config.json", "r") as config_file:\n    settings = json.load(config_file)',
+            'with open("config/production.json", "r") as f:\n    conf = json.load(f)',
+            'with open("settings.json") as settings_file:\n    app_config = json.load(settings_file)'
+        ]
+    ),
+    "yaml_config": PatternDefinition(
+        name="YAML Configuration",
+        pattern=r"([A-Za-z_]+):\s*(?:[\"']?)(?:[^\"'\n]+)(?:[\"']?)",
+        description="Find YAML configuration entries",
+        category=PatternCategory.CONFIGURATION,
+        subcategory="yaml",
+        tags=["configuration", "yaml", "file"],
+        examples=[
+            'host: 0.0.0.0',
+            'password: "Admin@123!"',
+            'api_key: "sk_live_51H7..."'
+        ]
+    ),
+    "ini_config": PatternDefinition(
+        name="INI Configuration",
+        pattern=r"(?:configparser\.ConfigParser|config\.ConfigParser)\(\s*\)\.read\s*\(\s*[\"']([^\"']+\.ini)[\"']\s*\)",
+        description="Find INI configuration file loading",
+        category=PatternCategory.CONFIGURATION,
+        subcategory="ini",
+        tags=["configuration", "ini", "file"],
+        examples=[
+            'config = configparser.ConfigParser().read("config.ini")',
+            'settings = config.ConfigParser().read("app_settings.ini")',
+            'conf = configparser.ConfigParser().read("production.ini")'
         ]
     )
 }

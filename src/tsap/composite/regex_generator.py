@@ -6,9 +6,7 @@ regular expressions based on examples or patterns.
 """
 
 import re
-import string
-import asyncio
-from typing import Dict, List, Any, Optional, Tuple, Set, Union
+from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass, field
 from collections import Counter
 

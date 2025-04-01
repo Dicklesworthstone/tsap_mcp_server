@@ -47,8 +47,6 @@ create_files() {
   touch .gitignore
   touch LICENSE
   touch README.md
-  touch CHANGELOG.md
-  touch CONTRIBUTING.md
   touch pyproject.toml
   touch .pre-commit-config.yaml
   touch .ruff.toml

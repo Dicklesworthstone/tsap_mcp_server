@@ -2,7 +2,7 @@
 API models for analysis tool endpoints in the TSAP MCP Server API.
 """
 
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 

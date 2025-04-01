@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 try:
     # Import necessary components
-    from mcp_client_example import MCPClient  # Use MCPClient
+    from tsap.mcp import MCPClient
 except ImportError as e:
     rich_print(f"[bold red]Error: Failed to import required modules: {e}[/bold red]")
     rich_print("[yellow]Make sure you're running from the TSAP project root, the virtual environment is activated, and mcp_client_example.py exists.[/yellow]")

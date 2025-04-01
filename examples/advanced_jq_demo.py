@@ -2,30 +2,25 @@
 """
 Advanced JQ Demo
 
-This script demonstrates the comprehensive features of the JQ integration
-in TSAP, including querying JSON strings, files (including JSON Lines),
-transforming data, and synergy with Ripgrep.
+This script demonstrates the comprehensive features of the JQ query
+tool in TSAP, including powerful JSON data manipulation and extraction.
 """
 import asyncio
+from datetime import datetime
 import os
 import sys
 import json
-from datetime import datetime
+import tempfile
 from pathlib import Path
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
-from rich.console import Console
 from rich.rule import Rule
-from typing import Any, Optional
+from typing import Dict, Any, List, Optional, Union
 
-# Assuming mcp_client_example.py is in the same directory or accessible
-# Adjust the import path if necessary
-try:
-    from mcp_client_example import MCPClient
-except ImportError:
-    print("Error: Could not import MCPClient. Make sure mcp_client_example.py is accessible.")
-    sys.exit(1)
+# Import the MCP client from the library
+from tsap.mcp import MCPClient
 
 console = Console()
 

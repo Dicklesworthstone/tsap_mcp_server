@@ -628,16 +628,65 @@ async def _search_structural_model(
     # First, find elements matching the structural constraints
     candidate_elements = []
     
-    # Filter by element type if specified
-    if params.element_type:
-        element_type = ElementType(params.element_type)
+    # Convert structure_type to a valid ElementType or use a default
+    try:
+        # Process structure type - handle various input formats
+        if params.structure_type:
+            # Map common alternative names to valid ElementType values
+            type_mapping = {
+                "function": "function_def",
+                "class": "class_def",
+                "method": "method_def",
+            }
+            
+            # Apply mapping if needed
+            structure_type = params.structure_type.lower()
+            if structure_type in type_mapping:
+                structure_type = type_mapping[structure_type]
+                
+            # Try to convert to ElementType
+            try:
+                element_type = ElementType(structure_type)
+                
+                # Filter by element type
+                for file_path, document in model.documents.items():
+                    elements = document.find_elements_by_type(element_type)
+                    candidate_elements.extend([(file_path, element) for element in elements])
+            except ValueError:
+                logger.warning(
+                    f"Invalid structure type '{params.structure_type}', falling back to all elements",
+                    component="composite",
+                    operation="structure_search"
+                )
+                # Fall back to all elements
+                for file_path, document in model.documents.items():
+                    def collect_elements(element):
+                        elements = [element]
+                        for child in element.children:
+                            elements.extend(collect_elements(child))
+                        return elements
+                    
+                    all_elements = collect_elements(document.root)
+                    candidate_elements.extend([(file_path, element) for element in all_elements])
+        else:
+            # No structure type specified, use all elements
+            for file_path, document in model.documents.items():
+                def collect_elements(element):
+                    elements = [element]
+                    for child in element.children:
+                        elements.extend(collect_elements(child))
+                    return elements
+                
+                all_elements = collect_elements(document.root)
+                candidate_elements.extend([(file_path, element) for element in all_elements])
+    except Exception as e:
+        logger.error(
+            f"Error processing structure type: {str(e)}",
+            component="composite",
+            operation="structure_search"
+        )
+        # Fall back to all elements
         for file_path, document in model.documents.items():
-            elements = document.find_elements_by_type(element_type)
-            candidate_elements.extend([(file_path, element) for element in elements])
-    else:
-        # All elements are candidates
-        for file_path, document in model.documents.items():
-            # Use a recursive function to get all elements
             def collect_elements(element):
                 elements = [element]
                 for child in element.children:
@@ -648,12 +697,39 @@ async def _search_structural_model(
             candidate_elements.extend([(file_path, element) for element in all_elements])
     
     # Filter by parent type if specified
-    if params.parent_type:
-        parent_type = ElementType(params.parent_type)
-        candidate_elements = [
-            (file_path, element) for file_path, element in candidate_elements
-            if element.parent and element.parent.element_type == parent_type
-        ]
+    if hasattr(params, 'parent_type') and params.parent_type:
+        try:
+            # Map common alternative names to valid ElementType values
+            type_mapping = {
+                "function": "function_def",
+                "class": "class_def",
+                "method": "method_def",
+            }
+            
+            # Apply mapping if needed
+            parent_type_str = params.parent_type.lower()
+            if parent_type_str in type_mapping:
+                parent_type_str = type_mapping[parent_type_str]
+                
+            # Try to convert to ElementType
+            try:
+                parent_type = ElementType(parent_type_str)
+                candidate_elements = [
+                    (file_path, element) for file_path, element in candidate_elements
+                    if element.parent and element.parent.element_type == parent_type
+                ]
+            except ValueError:
+                logger.warning(
+                    f"Invalid parent type '{params.parent_type}', ignoring parent type filter",
+                    component="composite",
+                    operation="structure_search"
+                )
+        except Exception as e:
+            logger.error(
+                f"Error processing parent type: {str(e)}",
+                component="composite",
+                operation="structure_search"
+            )
     
     # Now search within the candidate elements
     for file_path, element in candidate_elements:
@@ -662,12 +738,15 @@ async def _search_structural_model(
             continue
         
         # Search for the pattern in the element's content
-        if params.pattern:
-            if params.is_regex:
+        if params.structure_pattern:
+            case_sensitive = getattr(params, 'case_sensitive', False)
+            is_regex = getattr(params, 'is_regex', False)
+            
+            if is_regex:
                 try:
                     # Compile regex with appropriate flags
-                    flags = 0 if params.case_sensitive else re.IGNORECASE
-                    regex = re.compile(params.pattern, flags)
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    regex = re.compile(params.structure_pattern, flags)
                     
                     # Find all matches
                     for match in regex.finditer(element.content):
@@ -708,21 +787,22 @@ async def _search_structural_model(
                     )
             else:
                 # Simple text search
-                search_text = params.pattern if params.case_sensitive else params.pattern.lower()
-                content_text = element.content if params.case_sensitive else element.content.lower()
+                search_text = params.structure_pattern if case_sensitive else params.structure_pattern.lower()
+                content_text = element.content if case_sensitive else element.content.lower()
                 
                 start = 0
-                while True:
-                    pos = content_text.find(search_text, start)
-                    if pos == -1:
+                while start < len(content_text):
+                    # Find the next match
+                    start_idx = content_text.find(search_text, start)
+                    if start_idx == -1:
                         break
                     
-                    # Get the line number for the match
-                    content_before_match = element.content[:pos]
-                    line_number = content_before_match.count('\n') + element.position.start_line
+                    # Get match text
+                    match_text = element.content[start_idx:start_idx + len(search_text)]
                     
-                    # Get the matched text (from the original content)
-                    match_text = element.content[pos:pos+len(search_text)]
+                    # Calculate line number
+                    content_before_match = element.content[:start_idx]
+                    line_number = content_before_match.count('\n') + element.position.start_line
                     
                     # Create a structural match
                     structural_match = StructuralMatch(
@@ -732,7 +812,7 @@ async def _search_structural_model(
                         element_content=element.content,
                         match_line=line_number,
                         match_text=match_text,
-                        context_text=_extract_context(element.content, pos, 50),
+                        context_text=_extract_context(element.content, start_idx, 50),
                         confidence=1.0
                     )
                     
@@ -748,31 +828,8 @@ async def _search_structural_model(
                     # Add to matches
                     matches.append(structural_match)
                     
-                    # Move to next position
-                    start = pos + len(search_text)
-        else:
-            # No pattern specified, add the element itself as a match
-            structural_match = StructuralMatch(
-                file_path=file_path,
-                element_id=element.element_id,
-                element_type=element.element_type,
-                element_content=element.content,
-                match_line=element.position.start_line,
-                match_text=element.content[:50] + "..." if len(element.content) > 50 else element.content,
-                confidence=1.0
-            )
-            
-            # Add parent elements info
-            parent = element.parent
-            while parent:
-                structural_match.parent_elements.append({
-                    "element_id": parent.element_id,
-                    "element_type": parent.element_type.value
-                })
-                parent = parent.parent
-            
-            # Add to matches
-            matches.append(structural_match)
+                    # Move to the position after this match
+                    start = start_idx + len(search_text)
     
     return matches
 
@@ -813,16 +870,17 @@ async def structure_search(params: StructureSearchParams) -> StructureSearchResu
     Returns:
         Structure search results
     """
+    start_time = time.time()
     try:
         # Build structural model
-        start_time = time.time()
-        model = await _build_structural_model(params.files)
-        model_build_time = time.time() - start_time
+        model_start_time = time.time()
+        model = await _build_structural_model(params.paths)
+        model_build_time = time.time() - model_start_time
         
         # Search the model
-        start_time = time.time()
+        search_start_time = time.time()
         matches = await _search_structural_model(model, params)
-        search_time = time.time() - start_time
+        search_time = time.time() - search_start_time
         
         # Convert matches to dictionaries
         match_dicts = [match.to_dict() for match in matches]
@@ -830,19 +888,20 @@ async def structure_search(params: StructureSearchParams) -> StructureSearchResu
         # Create result
         result = StructureSearchResult(
             matches=match_dicts,
-            total_matches=len(matches),
-            files_with_matches=len(set(match.file_path for match in matches)),
-            total_files=len(params.files),
-            execution_time=model_build_time + search_time,
-            execution_stats={
+            structures=[],  # We'll leave this empty for now
+            stats={
                 "model_build_time": model_build_time,
                 "search_time": search_time,
-                "total_elements": sum(len(list(_collect_elements(doc.root))) for doc in model.documents.values())
-            }
+                "total_elements": sum(len(list(_collect_elements(doc.root))) for doc in model.documents.values()),
+                "total_files": len(model.documents)
+            },
+            truncated=False,
+            execution_time=time.time() - start_time
         )
         
         return result
     except Exception as e:
+        total_time = time.time() - start_time
         logger.error(
             f"Error during structure search: {str(e)}",
             component="composite",
@@ -852,11 +911,10 @@ async def structure_search(params: StructureSearchParams) -> StructureSearchResu
         # Return empty result with error
         return StructureSearchResult(
             matches=[],
-            total_matches=0,
-            files_with_matches=0,
-            total_files=len(params.files),
-            execution_time=0.0,
-            execution_stats={},
+            structures=[],
+            stats={},
+            truncated=False,
+            execution_time=total_time,
             error=str(e)
         )
 
@@ -891,24 +949,120 @@ async def search_by_structure(
         pattern: Search pattern
         files: Files to search
         element_type: Type of element to search within
-        parent_type: Type of parent element to filter by
+        parent_type: Type of parent structure to filter by
         case_sensitive: Whether to use case-sensitive matching
         is_regex: Whether the pattern is a regular expression
         
     Returns:
         Structure search results as a dictionary
     """
-    # Create parameters
-    params = StructureSearchParams(
-        pattern=pattern,
-        files=files,
-        element_type=element_type,
-        parent_type=parent_type,
-        case_sensitive=case_sensitive,
-        is_regex=is_regex
-    )
-    
-    # Perform search
-    result = await structure_search(params)
-    
-    return result.dict()
+    try:
+        # Log files being searched
+        logger.info(
+            f"Structure search for pattern '{pattern}' in {len(files)} files",
+            component="composite",
+            operation="structure_search",
+            context={
+                "element_type": element_type,
+                "parent_type": parent_type,
+                "case_sensitive": case_sensitive,
+                "is_regex": is_regex,
+                "files": files[:5]  # Log first 5 files max
+            }
+        )
+        
+        # Verify files exist
+        valid_files = []
+        for file_path in files:
+            if os.path.exists(file_path):
+                valid_files.append(file_path)
+            else:
+                logger.warning(
+                    f"File not found: {file_path}",
+                    component="composite",
+                    operation="structure_search"
+                )
+        
+        if len(valid_files) < len(files):
+            logger.warning(
+                f"{len(files) - len(valid_files)} files not found",
+                component="composite",
+                operation="structure_search"
+            )
+        
+        if not valid_files:
+            logger.warning(
+                "No valid files to search",
+                component="composite",
+                operation="structure_search"
+            )
+            return {
+                "matches": [],
+                "structures": [],
+                "stats": {},
+                "truncated": False,
+                "execution_time": 0.0
+            }
+            
+        # Create parameters
+        params = StructureSearchParams(
+            paths=valid_files,
+            structure_pattern=pattern,
+            structure_type=element_type,
+            parent_type=parent_type,
+            case_sensitive=case_sensitive,
+            is_regex=is_regex
+        )
+        
+        # Perform search
+        try:
+            result = await structure_search(params)
+            
+            # Log results
+            logger.info(
+                f"Structure search completed with {len(result.matches)} matches",
+                component="composite",
+                operation="structure_search",
+                context={
+                    "total_files": len(valid_files),
+                    "execution_time": result.execution_time
+                }
+            )
+            
+            return result.dict()
+        except Exception as e:
+            logger.error(
+                f"Error during structure search: {str(e)}",
+                component="composite",
+                operation="structure_search"
+            )
+            # Return empty result
+            return {
+                "matches": [],
+                "structures": [],
+                "stats": {},
+                "truncated": False,
+                "execution_time": 0.0,
+                "error": str(e)
+            }
+    except Exception as e:
+        # Catch all errors and return a valid response
+        logger.error(
+            f"Unexpected error in structure search: {str(e)}",
+            component="composite",
+            operation="structure_search"
+        )
+        import traceback
+        logger.error(
+            traceback.format_exc(),
+            component="composite",
+            operation="structure_search"
+        )
+        return {
+            "matches": [],
+            "structures": [],
+            "stats": {},
+            "truncated": False,
+            "execution_time": 0.0,
+            "error": f"Unexpected error: {str(e)}"
+        }

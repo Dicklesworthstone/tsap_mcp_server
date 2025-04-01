@@ -2,9 +2,9 @@
 """
 Advanced PDF Extractor Demo
 
-This script demonstrates the comprehensive features of the PDF Extractor integration
-in TSAP, including text, metadata, image, and table extraction from PDF files,
-and potential synergies with other tools.
+This script demonstrates the comprehensive features of the PDF Extractor
+tool in TSAP, including text extraction, table extraction, image analysis,
+and metadata retrieval from PDF documents.
 """
 import asyncio
 import os
@@ -12,20 +12,16 @@ import sys
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Dict, Union
-
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.console import Console
 from rich.rule import Rule
 from rich.text import Text
 from rich import box
+from typing import Dict, Any, Optional, Union
 
-try:
-    from mcp_client_example import MCPClient
-except ImportError: # Capture the exception details
-    print("Error: Could not import MCPClient. Make sure mcp_client_example.py is accessible.")
-    sys.exit(1)
+# Import the MCP client from the library
+from tsap.mcp import MCPClient
 
 console = Console()
 
@@ -37,8 +33,8 @@ MAX_TEXT_DISPLAY_CHARS = 500 # Limit text output in demos
 # --- Example File Paths ---
 # Ensure these paths are relative to the workspace root where the script is run
 EXAMPLE_DATA_DIR = "tsap_example_data"
-PDF_LAMPORT = os.path.join(EXAMPLE_DATA_DIR, "lamport-paxos.pdf")
-PDF_SLIDES = os.path.join(EXAMPLE_DATA_DIR, "durnovo_presentation_slides.pdf")
+PDF_LAMPORT = os.path.join(EXAMPLE_DATA_DIR, "pdfs/lamport-paxos.pdf")
+PDF_SLIDES = os.path.join(EXAMPLE_DATA_DIR, "pdfs/durnovo_presentation_slides.pdf")
 # --- End Example File Paths ---
 
 
@@ -180,7 +176,7 @@ async def pdf_extractor_demo():
             try:
                 # Use glob to find files matching the pattern
                 import glob
-                search_pattern = os.path.join(EXAMPLE_DATA_DIR, "*.pdf")
+                search_pattern = os.path.join(EXAMPLE_DATA_DIR, "pdfs/*.pdf")
                 files_found = sorted(glob.glob(search_pattern))
 
                 if files_found:

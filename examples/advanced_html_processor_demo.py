@@ -46,7 +46,7 @@ if script_dir not in sys.path:
 
 # Assuming mcp_client_example.py is in the same directory or accessible
 try:
-    from mcp_client_example import MCPClient #, ApiException
+    from tsap.mcp import MCPClient
 except ImportError as e:
     print("Error: Could not import MCPClient or its dependencies.")
     print(f"Import Error: {e}")

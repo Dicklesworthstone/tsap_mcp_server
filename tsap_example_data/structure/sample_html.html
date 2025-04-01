@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Structure Search Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        .section {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .note {
+            background-color: #ffffd9;
+            padding: 10px;
+            border-left: 4px solid #e6db55;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Structure Search HTML Example</h1>
+        <p>This HTML document demonstrates various structural elements that can be searched.</p>
+    </header>
+    
+    <div class="section">
+        <h2>Introduction</h2>
+        <p>The structure search tool can identify and search through different HTML elements:</p>
+        <ul>
+            <li>Headings (h1, h2, h3, etc.)</li>
+            <li>Paragraphs</li>
+            <li>Lists (ordered and unordered)</li>
+            <li>Tables</li>
+            <li>Code blocks</li>
+            <li>Sections and divs</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>Code Examples</h2>
+        <h3>Python Example</h3>
+        <pre><code>
+def fibonacci(n):
+    # Generate the Fibonacci sequence up to n
+    a, b = 0, 1
+    result = []
+    while a < n:
+        result.append(a)
+        a, b = b, a + b
+    return result
+
+print(fibonacci(100))
+        </code></pre>
+        
+        <h3>JavaScript Example</h3>
+        <pre><code>
+function sortNumbers(array) {
+    // Sort an array of numbers in ascending order
+    return array.sort((a, b) => a - b);
+}
+
+const numbers = [5, 2, 9, 1, 5, 6];
+console.log(sortNumbers(numbers));  // Output: [1, 2, 5, 5, 6, 9]
+        </code></pre>
+    </div>
+    
+    <div class="section">
+        <h2>Tables</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>Item One</td>
+                    <td>Category A</td>
+                    <td>100</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>Item Two</td>
+                    <td>Category B</td>
+                    <td>75</td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>Item Three</td>
+                    <td>Category A</td>
+                    <td>50</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="section">
+        <h2>Notes and Comments</h2>
+        <div class="note">
+            <p>This is a special note section that can be targeted by structure search.</p>
+            <p>You can search for elements with specific classes or nested within certain parent elements.</p>
+        </div>
+        <!-- This is an HTML comment that could be matched by structure search -->
+    </div>
+    
+    <footer>
+        <p>This example document was created for the TSAP Structure Search demonstration.</p>
+    </footer>
+</body>
+</html>

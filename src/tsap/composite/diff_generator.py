@@ -9,8 +9,7 @@ import asyncio
 import os
 import re
 import difflib
-import json
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
 from tsap.utils.logging import logger
@@ -222,7 +221,7 @@ async def _generate_structural_diff(
     
     for chunk in basic_chunks:
         # Determine the file type based on common patterns
-        file_extension = None
+        file_extension = None  # noqa: F841
         
         # Look for function/class/block boundaries
         # Start and end lines for expanded chunk

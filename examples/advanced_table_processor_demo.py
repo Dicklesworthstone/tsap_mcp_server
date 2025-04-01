@@ -24,7 +24,7 @@ from typing import Dict, Optional
 # Assuming mcp_client_example.py is in the same directory or accessible
 # Adjust the import path if necessary
 try:
-    from mcp_client_example import MCPClient
+    from tsap.mcp import MCPClient
 except ImportError:
     print("Error: Could not import MCPClient. Make sure mcp_client_example.py is accessible.")
     sys.exit(1)

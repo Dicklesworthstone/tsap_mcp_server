@@ -12,7 +12,7 @@ from rich.syntax import Syntax
 from rich.console import Console
 
 # from api_client import TSAPClient, API_KEY # Import from our client module
-from mcp_client_example import MCPClient # Use MCPClient instead
+from tsap.mcp import MCPClient
 
 # Create console instance
 console = Console()

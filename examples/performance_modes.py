@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from mcp_client_example import MCPClient
+from tsap.mcp import MCPClient
 
 # Create console instance
 console = Console()

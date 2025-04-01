@@ -6,13 +6,11 @@ import asyncio
 import uuid
 import time
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Path, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Path, status
 
 from tsap.utils.logging import logger
-from tsap.performance_mode import get_performance_mode
 from tsap.api.dependencies import api_key_dependency, performance_mode_dependency
 from tsap.api.models.analysis import (
     CodeAnalysisRequest,

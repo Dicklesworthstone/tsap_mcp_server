@@ -7,6 +7,7 @@ dispatching them to the appropriate tool implementations.
 import time
 import asyncio
 import traceback
+import os
 from typing import Dict, Optional, Callable, Any
 
 from tsap.utils.logging import logger
@@ -29,6 +30,7 @@ from tsap.evolution.pattern_analyzer import analyze_pattern
 from tsap.composite.document_profiler import profile_documents
 import faiss
 from tsap.composite.semantic_search import SemanticSearchParams, get_operation
+from tsap.core.semantic_search_tool import get_tool as get_semantic_tool
 from tsap.core.table_processor import process_table, get_table_processor
 from tsap.core.html_processor import process_html, HtmlProcessParams
 
@@ -44,6 +46,7 @@ from .models import (
     TableProcessResult,
     PdfExtractParams,
     PdfExtractResult,
+    StructureSearchParams,
 )
 
 
@@ -383,6 +386,9 @@ def initialize_handlers():
     register_command_handler(MCPCommandType.DOCUMENT_PROFILE, handle_document_profile)
     register_command_handler(MCPCommandType.SEMANTIC_SEARCH, handle_semantic_search)
     
+    # Register structure search handler
+    register_command_handler(MCPCommandType.STRUCTURE_SEARCH, handle_structure_search)
+    
     # Register test handler
     register_command_handler("test", handle_test)
     
@@ -615,19 +621,252 @@ async def handle_pattern_analyze(args: Dict[str, Any]) -> Dict[str, Any]:
         operation="pattern_analyze"
     )
     
-    # Execute pattern analysis
-    result = await analyze_pattern(
-        pattern=args.get("pattern"),
-        description=args.get("description", ""),
-        is_regex=args.get("is_regex", True),
-        case_sensitive=args.get("case_sensitive", False),
-        paths=args.get("paths", []),
-        reference_set=args.get("reference_set"),
-        generate_variants=args.get("generate_variants", True),
-        num_variants=args.get("num_variants", 3),
-    )
+    # Handle different pattern analysis actions
+    action = args.get("action")
+    if action == "list_categories":
+        # Import the pattern library
+        from tsap.composite.patterns import get_pattern_library
+        
+        # Get the pattern library
+        library = get_pattern_library()
+        
+        # Check if there are any patterns, if not, bootstrap the library
+        if not library.list_patterns():
+            from tsap.composite.bootstrap_patterns import bootstrap_pattern_library
+            bootstrap_pattern_library()
+            
+        # List categories
+        categories = library.list_categories()
+        
+        # Get descriptions for each category
+        category_descriptions = {}
+        for category in categories:
+            # Add a human-readable description for each category
+            if category == "security":
+                category_descriptions[category] = "Security vulnerability patterns"
+            elif category == "code":
+                category_descriptions[category] = "Code quality and style patterns"
+            elif category == "configuration":
+                category_descriptions[category] = "Configuration file patterns"
+            elif category == "documentation":
+                category_descriptions[category] = "Documentation and comment patterns"
+            elif category == "log":
+                category_descriptions[category] = "Log file patterns"
+            elif category == "data":
+                category_descriptions[category] = "Data format and structure patterns"
+            elif category == "custom":
+                category_descriptions[category] = "User-defined custom patterns"
+            else:
+                category_descriptions[category] = "General purpose patterns"
+        
+        return {"status": "success", "result": {"categories": categories, "descriptions": category_descriptions}}
     
-    return result
+    elif action == "list_patterns" or action == "get_patterns_by_category":
+        # Import the pattern library
+        from tsap.composite.patterns import get_pattern_library, PatternCategory
+        
+        # Get the pattern library
+        library = get_pattern_library()
+        
+        # Check if there are any patterns, if not, bootstrap the library
+        if not library.list_patterns():
+            from tsap.composite.bootstrap_patterns import bootstrap_pattern_library
+            bootstrap_pattern_library()
+            
+        # Get parameters
+        category = args.get("category")
+        
+        # List patterns in the category
+        if category:
+            try:
+                category_obj = PatternCategory(category.lower())
+                patterns = library.list_patterns(category=category_obj)
+            except ValueError:
+                # Invalid category
+                return {"status": "error", "error": {"message": f"Invalid category: {category}"}}
+        else:
+            patterns = library.list_patterns()
+            
+        # Convert patterns to dictionaries
+        pattern_dicts = []
+        for pattern in patterns:
+            pattern_dicts.append({
+                "id": pattern.id,
+                "name": pattern.name,
+                "description": pattern.description,
+                "category": pattern.category.value,
+                "subcategory": pattern.subcategory,
+                "tags": pattern.tags,
+                "priority": pattern.priority.value,
+                "confidence": pattern.confidence
+            })
+            
+        return {"status": "success", "result": pattern_dicts}
+    
+    elif action == "apply_patterns":
+        # Import the pattern library
+        from tsap.composite.patterns import get_pattern_library, PatternCategory
+        
+        # Get parameters
+        file_path = args.get("file_path")
+        category = args.get("category")
+        
+        if not file_path:
+            return {"status": "error", "error": {"message": "file_path parameter is required"}}
+            
+        # Get the pattern library
+        library = get_pattern_library()
+        
+        # Check if there are any patterns, if not, bootstrap the library
+        if not library.list_patterns():
+            from tsap.composite.bootstrap_patterns import bootstrap_pattern_library
+            bootstrap_pattern_library()
+            
+        # Get patterns for the category
+        patterns = []
+        if category:
+            try:
+                category_obj = PatternCategory(category.lower())
+                patterns = library.list_patterns(category=category_obj)
+            except ValueError:
+                return {"status": "error", "error": {"message": f"Invalid category: {category}"}}
+        else:
+            patterns = library.list_patterns()
+            
+        # Read the file content
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            return {"status": "error", "error": {"message": f"Failed to read file: {str(e)}"}}
+            
+        # Apply each pattern
+        results = []
+        for pattern in patterns:
+            try:
+                # Compile the pattern
+                import re
+                flags = 0 if pattern.case_sensitive else re.IGNORECASE
+                pattern_obj = re.compile(pattern.pattern, flags) if pattern.is_regex else re.compile(re.escape(pattern.pattern), flags)
+                
+                # Find matches
+                matches = []
+                for i, line in enumerate(content.splitlines(), 1):
+                    for match in pattern_obj.finditer(line):
+                        matches.append({
+                            "line": i,
+                            "match": match.group(0),
+                            "context": line,
+                        })
+                        
+                if matches:
+                    results.append({
+                        "pattern": pattern.pattern,
+                        "name": pattern.name,
+                        "description": pattern.description,
+                        "category": pattern.category.value,
+                        "matches": matches
+                    })
+            except re.error as e:
+                logger.warning(f"Invalid regex pattern {pattern.pattern}: {str(e)}")
+                continue
+                
+        return {"status": "success", "result": results}
+    
+    elif action == "test_pattern":
+        # Test a pattern against examples
+        pattern = args.get("pattern")
+        examples = args.get("examples", [])
+        negative_examples = args.get("negative_examples", [])
+        is_regex = args.get("is_regex", True)
+        case_sensitive = args.get("case_sensitive", False)
+        
+        if not pattern:
+            return {"status": "error", "error": {"message": "pattern parameter is required"}}
+            
+        # Prepare reference set
+        reference_set = {
+            "positive": examples,
+            "negative": negative_examples
+        }
+        
+        # Execute pattern analysis
+        result = await analyze_pattern(
+            pattern=pattern,
+            description="",
+            is_regex=is_regex,
+            case_sensitive=case_sensitive,
+            paths=[],
+            reference_set=reference_set,
+            generate_variants=False,
+            num_variants=0,
+        )
+        
+        # Create simplified test results
+        matches = []
+        failed_examples = []
+        failed_negatives = []
+        
+        # Track matches and failures
+        for example in examples:
+            import re
+            flags = 0 if case_sensitive else re.IGNORECASE
+            pattern_obj = re.compile(pattern, flags) if is_regex else re.compile(re.escape(pattern), flags)
+            if pattern_obj.search(example):
+                matches.append(example)
+            else:
+                failed_examples.append(example)
+                
+        for example in negative_examples:
+            import re
+            flags = 0 if case_sensitive else re.IGNORECASE
+            pattern_obj = re.compile(pattern, flags) if is_regex else re.compile(re.escape(pattern), flags)
+            if pattern_obj.search(example):
+                failed_negatives.append(example)
+        
+        test_results = {
+            "success": len(failed_examples) == 0 and len(failed_negatives) == 0,
+            "matches": matches,
+            "failed_examples": failed_examples,
+            "failed_negatives": failed_negatives,
+            "stats": result.get("stats", {})  # Include the stats from the analysis
+        }
+        
+        return {"status": "success", "result": test_results}
+    
+    else:
+        # Default: execute pattern analysis
+        try:
+            result = await analyze_pattern(
+                pattern=args.get("pattern"),
+                description=args.get("description", ""),
+                is_regex=args.get("is_regex", True),
+                case_sensitive=args.get("case_sensitive", False),
+                paths=args.get("paths", []),
+                reference_set=args.get("reference_set"),
+                generate_variants=args.get("generate_variants", True),
+                num_variants=args.get("num_variants", 3),
+            )
+            return result
+        except TypeError as e:
+            logger.error(f"TypeError in analyze_pattern: {e}", component="mcp", operation="pattern_analyze")
+            return {
+                "status": "error", 
+                "error": {
+                    "message": f"Type error: {str(e)}", 
+                    "details": "Invalid input types to analyze_pattern function"
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error in analyze_pattern: {e}", component="mcp", operation="pattern_analyze")
+            import traceback
+            return {
+                "status": "error", 
+                "error": {
+                    "message": str(e),
+                    "details": traceback.format_exc()
+                }
+            }
 
 
 async def handle_strategy_compile(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -812,16 +1051,37 @@ async def handle_document_profile(args: Dict[str, Any]) -> Dict[str, Any]:
 # Semantic Search Handler
 async def handle_semantic_search(args: Dict[str, Any]) -> Dict[str, Any]:
     """Handle the semantic_search command."""
-    # Example of using a Pydantic model for parsing/validation
     try:
         params = SemanticSearchParams(**args)
         operation = get_operation("semantic_search")
-        result = await operation.execute(params)
-        return result.dict() # Convert result model to dict
+        # Get the tool instance to access backend info later
+        tool_instance = get_semantic_tool("semantic_search") 
+        result_list = await operation.execute(params)
+        
+        # Get backend info after execution (index might be populated)
+        backend_info = tool_instance.get_backend_info() 
+
+        # Construct the full response payload
+        response_payload = {
+            "results": result_list,
+            "query": params.query, 
+            "top_k": params.top_k,
+            # Use backend info obtained from the tool instance
+            "faiss_backend": backend_info.get("backend", "unknown"), 
+            "embedding_model": backend_info.get("embedding_model", params.embedding_model),
+            "index_size": backend_info.get("index_size", 0)
+        }
+        return response_payload
     except Exception as e:
         logger.error(f"Error during semantic search: {e}", exception=e)
-        # Re-raise or handle appropriately
-        raise # Reraise to be caught by the main handler
+        # Return a structured error payload
+        return {
+            "error": {
+                "code": "handler_error",
+                "message": str(e),
+                "details": traceback.format_exc()
+            }
+        }
 
 
 # --- Add Handler for HTML Processor --- #
@@ -856,6 +1116,194 @@ async def handle_test(args: Dict[str, Any]) -> Dict[str, Any]:
         operation="test_handler"
     )
     return {"message": "Test command successful", "received_args": args}
+
+
+# Document Profiler Specific Handlers
+@command_handler("tsap.composite.document_profiler.profile_document")
+async def handle_document_profile_single(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle profile_document command for a single document.
+    
+    Args:
+        args: Command arguments (document_path, include_content_features)
+        
+    Returns:
+        Profile data for a single document
+    """
+    logger.info(
+        "Handling document profiler profile_document command",
+        component="mcp",
+        operation="document_profile_single"
+    )
+    
+    try:
+        document_path = args.get("document_path")
+        include_content_features = args.get("include_content_features", True)
+        
+        if not document_path:
+            raise ValueError("document_path is required")
+            
+        # Create document profile using the composite function
+        from tsap.composite.document_profiler import create_document_profile
+        profile = await create_document_profile(document_path, include_content_features)
+        
+        # Convert profile to dictionary
+        return profile.to_dict()
+    except Exception as e:
+        logger.error(
+            f"Error in document profiler: {str(e)}",
+            component="mcp",
+            operation="document_profile_single",
+            exception=e
+        )
+        raise
+
+
+@command_handler("tsap.composite.document_profiler.profile_documents")
+async def handle_document_profile_multiple(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle profile_documents command for multiple documents.
+    
+    Args:
+        args: Command arguments (document_paths, include_content_features, compare_documents)
+        
+    Returns:
+        Profiles and comparison data for multiple documents
+    """
+    logger.info(
+        "Handling document profiler profile_documents command",
+        component="mcp",
+        operation="document_profile_multiple"
+    )
+    
+    try:
+        document_paths = args.get("document_paths", [])
+        include_content_features = args.get("include_content_features", True)
+        compare_documents = args.get("compare_documents", True)
+        
+        if not document_paths:
+            raise ValueError("document_paths is required and cannot be empty")
+            
+        # Profile documents using the composite function
+        from tsap.composite.document_profiler import profile_documents
+        result = await profile_documents(
+            document_paths=document_paths,
+            include_content_features=include_content_features,
+            compare_documents=compare_documents
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(
+            f"Error in document profiler: {str(e)}",
+            component="mcp",
+            operation="document_profile_multiple",
+            exception=e
+        )
+        raise
+
+
+async def handle_structure_search(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle structure_search related commands."""
+    from tsap.composite.structure_search import search_by_structure
+    from tsap.mcp.models import StructureSearchParams
+    from tsap.composite.structure import ElementType
+    
+    # Debug marker to verify this updated handler is being used
+    print("UPDATED_HANDLER_MARKER: structure_search handler was called")
+    
+    try:
+        # Map client parameter names to the function parameter names
+        action = args.get("action", "search")
+        
+        if action != "search":
+            return {
+                "status": "error", 
+                "error": {
+                    "code": "invalid_action",
+                    "message": f"Unknown action '{action}' for structure_search command",
+                    "details": "Currently only 'search' action is supported"
+                }
+            }
+        
+        # Map parameters correctly based on what's available
+        # First check new parameter names directly
+        paths = args.get("paths", args.get("file_paths", []))
+        structure_type = args.get("structure_type", args.get("element_type"))
+        
+        # Convert common input values to valid ElementType values if structure_type is provided
+        if structure_type is not None:
+            structure_type_mapping = {
+                "function": "function_def",
+                "FUNCTION_DEF": "function_def",
+                "class": "class_def",
+                "CLASS_DEF": "class_def",
+                "method": "method_def",
+                "METHOD_DEF": "method_def",
+            }
+            
+            # Apply mapping if needed
+            if structure_type in structure_type_mapping:
+                structure_type = structure_type_mapping[structure_type]
+        
+        structure_pattern = args.get("structure_pattern", args.get("search_term", ""))
+        
+        # Map other parameters from either naming convention
+        parent_elements = args.get("parent_elements", [])
+        case_sensitive = args.get("case_sensitive", False)
+        is_regex = args.get("is_regex", False)
+        
+        # Debug logging
+        logger.info(
+            f"Structure search request: pattern='{structure_pattern}', paths={len(paths)}, type={structure_type}",
+            component="mcp",
+            operation="structure_search",
+            context={
+                "structure_pattern": structure_pattern,
+                "paths": paths[:3],  # Log first few paths
+                "structure_type": structure_type,
+                "parent_elements": parent_elements,
+                "case_sensitive": case_sensitive,
+                "is_regex": is_regex
+            }
+        )
+        
+        # Verify files exist
+        valid_paths = []
+        for path in paths:
+            if not os.path.exists(path):
+                logger.warning(f"File not found: {path}", component="mcp", operation="structure_search")
+            else:
+                logger.info(f"File exists: {path}", component="mcp", operation="structure_search")
+                valid_paths.append(path)
+        
+        # Get the first parent element type if provided and map it if needed
+        parent_type = None
+        if parent_elements and len(parent_elements) > 0:
+            parent_type = parent_elements[0]
+            if parent_type in structure_type_mapping:
+                parent_type = structure_type_mapping[parent_type]
+        
+        # Map to the parameters expected by search_by_structure
+        try:
+            result = await search_by_structure(
+                pattern=structure_pattern,
+                files=valid_paths,
+                element_type=structure_type,
+                parent_type=parent_type,
+                case_sensitive=case_sensitive,
+                is_regex=is_regex
+            )
+            
+            return {"status": "success", "result": result}
+        except Exception as e:
+            logger.error(f"Error in structure search: {e}", component="mcp")
+            import traceback
+            logger.error(traceback.format_exc(), component="mcp")
+            return {"status": "error", "error": {"message": str(e)}}
+    except Exception as e:
+        logger.error(f"Error in structure search request: {e}", component="mcp")
+        import traceback
+        logger.error(traceback.format_exc(), component="mcp")
+        return {"status": "error", "error": {"message": f"Server error: {str(e)}"}}
 
 
 # Register default handlers

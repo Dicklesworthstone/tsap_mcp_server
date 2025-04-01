@@ -21,6 +21,12 @@ from tsap.mcp.handler import (
     get_command_handler,
 )
 
+# Export client implementation
+from tsap.mcp.client import (
+    MCPClient,
+    DEFAULT_SERVER_URL,
+)
+
 # Export commonly used models
 from tsap.mcp.models import (
     # Core tool models
@@ -66,6 +72,10 @@ __all__ = [
     "handle_request",
     "register_command_handler",
     "get_command_handler",
+    
+    # Client
+    "MCPClient",
+    "DEFAULT_SERVER_URL",
     
     # Models (Core)
     "RipgrepSearchParams",

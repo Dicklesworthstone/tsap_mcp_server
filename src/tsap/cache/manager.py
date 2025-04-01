@@ -10,9 +10,8 @@ import time
 import hashlib
 import asyncio
 import functools
-from typing import Dict, Any, Optional, Union, Callable, List, Tuple
+from typing import Dict, Any, Optional, List
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from datetime import datetime
 
 from tsap.utils.logging import logger

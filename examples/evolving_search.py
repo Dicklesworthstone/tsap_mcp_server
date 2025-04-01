@@ -8,7 +8,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.console import Console
 
-from mcp_client_example import MCPClient
+from tsap.mcp import MCPClient
 
 console = Console() # Instantiate Console
 
@@ -90,7 +90,7 @@ async def run_pattern_analysis(client: MCPClient):
         f"[bold]Precision:[/bold] {main_stats.get('precision', 0.0):.4f}\n"
         f"[bold]Recall:[/bold] {main_stats.get('recall', 0.0):.4f}\n"
         f"[bold]F1 Score:[/bold] {main_stats.get('f1_score', 0.0):.4f}\n"
-        f"[bold]Execution Time:[/bold] {exec_time:.2f}s",
+        f"[bold]Execution Time:[/bold] {exec_time:.4f}s",
         title="Initial Pattern Analysis Result",
         border_style="blue"
     )

@@ -4,7 +4,7 @@ Performance mode management for TSAP MCP Server.
 This module handles different performance modes that balance speed vs depth
 of analysis in TSAP operations.
 """
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any
 from enum import Enum
 import os
 import threading

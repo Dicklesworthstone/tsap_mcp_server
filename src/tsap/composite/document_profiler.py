@@ -276,20 +276,34 @@ async def _extract_document_text(document_path: str) -> str:
     try:
         # Extract text based on file type
         if ext == '.pdf':
+            logger.debug(f"Extracting text from PDF: {document_path}", component="composite", operation="document_profiler")
             return await extract_pdf_text(document_path, None, None) or ""
         elif ext in ['.html', '.htm']:
+            logger.debug(f"Extracting text from HTML: {document_path}", component="composite", operation="document_profiler")
             return await extract_html_text(None, None, document_path) or ""
         else:
             # Attempt to read as plain text
-            with open(document_path, 'r', encoding='utf-8', errors='replace') as f:
-                return f.read()
+            logger.debug(f"Reading as plain text: {document_path}", component="composite", operation="document_profiler")
+            try:
+                with open(document_path, 'r', encoding='utf-8', errors='replace') as f:
+                    text = f.read()
+                logger.debug(f"Successfully read {len(text)} characters from {document_path}", component="composite", operation="document_profiler")
+                return text
+            except UnicodeDecodeError:
+                # Try binary mode as a fallback
+                logger.warning(f"Unicode decode error, trying binary mode: {document_path}", component="composite", operation="document_profiler")
+                with open(document_path, 'rb') as f:
+                    binary_data = f.read()
+                return binary_data.decode('utf-8', errors='replace')
     except Exception as e:
         logger.error(
             f"Error extracting text from {document_path}: {str(e)}",
-            component="composite",
-            operation="document_profiler"
+            component="composite", 
+            operation="document_profiler",
+            exc_info=True  # Include full traceback
         )
-        return ""
+        # Re-raise the exception to ensure it's handled properly
+        raise
 
 
 async def _compute_basic_properties(document_path: str) -> Dict[str, Any]:
@@ -886,7 +900,13 @@ async def profile_documents(
                     comparisons[pair_key] = {"similarity": similarity}
                     logger.debug(f"Compared {os.path.basename(path1)} <-> {os.path.basename(path2)}: Similarity {similarity:.3f}", component="composite", operation="batch_profile_compare")
                 except Exception as e:
-                     logger.error(f"Error comparing {path1} and {path2}: {str(e)}", component="composite", operation="batch_profile_compare", exc_info=True)
+                    logger.error(
+                        f"Error comparing {path1} and {path2}: {str(e)}", 
+                        exception=e,
+                        component="composite", 
+                        operation="batch_profile_compare"
+                    )
+                    errors[f"{path1} <-> {path2}"] = str(e)
         logger.info(f"Completed document comparison. Found {len(comparisons)} comparison pairs.", component="composite", operation="batch_profile_compare")
 
     # Prepare results

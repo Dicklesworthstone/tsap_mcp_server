@@ -70,6 +70,26 @@ High-level semantic tools that leverage Layers 1 & 2 and work iteratively with t
 - **runtime_learning**: Real-time pattern optimization
 - **offline_learning**: Deep analysis of historical performance
 
+#### LLM-powered Pattern Generation
+
+- **LLM Pattern Evolution**: Connect to an existing LLM gateway to generate superior regex patterns
+- **Environment Variable Control**: Easily toggle between rule-based and LLM-based pattern generation
+- **Fallback Mechanism**: Gracefully fall back to rule-based generation if LLM generation fails
+- **Pattern Validation**: Automatically validate LLM-generated patterns before using them
+- **Source Tracking**: Clearly identify whether patterns came from rules or an LLM
+
+To enable LLM-powered pattern generation:
+
+```bash
+# Enable LLM pattern generation
+export USE_LLM_PATTERN_GENERATION=true
+
+# Set the LLM gateway URL (default: http://localhost:8013)
+export LLM_MCP_SERVER_URL=http://localhost:8013
+```
+
+See `examples/llm_pattern_evolution.py` for a complete demonstration.
+
 #### Plugin Architecture
 
 TSAP implements a true plugin architecture that allows:

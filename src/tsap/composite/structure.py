@@ -6,7 +6,7 @@ which serve as the foundation for structure-aware searching and processing.
 """
 
 from enum import Enum
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 
 

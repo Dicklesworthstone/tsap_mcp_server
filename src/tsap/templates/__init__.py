@@ -3,6 +3,8 @@ TSAP Templates Package.
 
 This package provides task templates for common workflows, enabling
 standardized execution of complex operations with minimal configuration.
+Templates leverage the TSAP ToolAPI infrastructure for efficient analysis
+and processing capabilities.
 """
 
 from tsap.templates.base import (

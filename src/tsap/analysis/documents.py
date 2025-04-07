@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from tsap.utils.logging import logger
 from tsap.core.ripgrep import ripgrep_search
 from tsap.core.pdf_extractor import extract_pdf_text
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     DocumentExplorerParams, DocumentExplorerResult, DocumentInfo,
     RipgrepSearchParams
 )

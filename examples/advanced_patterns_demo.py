@@ -16,8 +16,8 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.box import ROUNDED
 
-# Import the MCP client from the library
-from tsap.mcp import MCPClient
+# Import the ToolAPI client from the library
+from tsap.toolapi import ToolAPIClient
 
 # --- Path Setup --- #
 # Add the project root and src directory to the Python path
@@ -180,8 +180,8 @@ security:
 
     # Create our client
     try:
-        debug_print("Creating MCPClient...")
-        async with MCPClient() as client:
+        debug_print("Creating ToolAPIClient...")
+        async with ToolAPIClient() as client:
             debug_print("Running demos...")
 
             # Initial server info check
@@ -290,7 +290,7 @@ async def create_pattern_demo(client):
     # Define a custom pattern for testing
     custom_pattern = {
         "name": "API Key Pattern",
-        "pattern": r"api[_-]?key[_-]?=\s*['\"]([a-zA-Z0-9_-]{20,})['\"]",
+        "pattern": r"(?i)api[_-]?key[_-]?\s*=\s*['\"]([a-zA-Z0-9_-]{20,})['\"]",
         "description": "Detects potential API keys in code",
         "category": "security",
         "is_regex": True,
@@ -344,32 +344,43 @@ async def create_pattern_demo(client):
     
     console.print("\n[bold]Adding pattern to library:[/bold]")
     
-    response = await client.send_request(
-        "pattern_analyze",
-        {
-            "action": "add_custom_pattern",
-            "name": custom_pattern["name"],
-            "pattern": custom_pattern["pattern"],
-            "description": custom_pattern["description"],
-            "category": custom_pattern["category"],
-            "is_regex": custom_pattern["is_regex"],
-            "tags": custom_pattern["tags"]
-        }
-    )
-    
-    # Print the raw response for debugging
-    if DEBUG:
-        console.print("[bold cyan]DEBUG: Raw add custom pattern response:[/bold cyan]")
-        console.print(response)
-    
-    # Use the new helper method to extract the result
-    extracted = client.extract_result(response)
-    if not extracted["success"]:
-        console.print(f"[bold red]Error adding pattern:[/bold red] {extracted['error']}")
-        return
-    
-    pattern_id = extracted["result"] or ""
-    console.print(f"[green]Pattern added successfully with ID: {pattern_id}[/green]")
+    try:
+        # Import the pattern library
+        from tsap.composite.patterns import get_pattern_library, PatternDefinition, PatternCategory
+        from tsap.composite.patterns import PatternPriority, PatternError
+        
+        # Get the pattern library
+        library = get_pattern_library()
+        
+        # Create pattern definition
+        try:
+            category_obj = PatternCategory(custom_pattern["category"].lower())
+        except ValueError:
+            category_obj = PatternCategory.CUSTOM
+            
+        pattern_def = PatternDefinition(
+            name=custom_pattern["name"],
+            pattern=custom_pattern["pattern"],
+            description=custom_pattern["description"],
+            category=category_obj,
+            is_regex=custom_pattern["is_regex"],
+            case_sensitive=custom_pattern["case_sensitive"],
+            tags=custom_pattern["tags"],
+            priority=PatternPriority.MEDIUM,
+            confidence=0.8
+        )
+        
+        # Validate the pattern by compiling it
+        pattern_def.compile()
+        
+        # Add to library directly (no need for async here)
+        pattern_id = library.add_custom_pattern(pattern_def)
+        console.print(f"[green]Pattern added successfully with ID: {pattern_id}[/green]")
+        
+    except Exception as e:
+        console.print(f"[bold red]Error adding pattern: {e}[/bold red]")
+        import traceback
+        console.print(traceback.format_exc())
 
 async def apply_patterns_demo(client, file_paths=None):
     """Demo applying patterns to different file types."""

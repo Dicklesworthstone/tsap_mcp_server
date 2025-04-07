@@ -12,17 +12,14 @@ import time
 import statistics
 import json
 import uuid
-import asyncio
 import httpx
-import logging
 
 from tsap.utils.logging import logger
 from tsap.core.ripgrep import ripgrep_search
-from tsap.mcp.models import RipgrepSearchParams
 
-# Define a simple MCPClient class for internal use
-class MCPClient:
-    """Simple client for interacting with MCP Servers."""
+# Define a simple ToolAPIClient class for internal use
+class ToolAPIClient:
+    """Simple client for interacting with ToolAPI Servers."""
 
     def __init__(self, base_url: str = "http://localhost:8013"):
         self.base_url = base_url
@@ -46,8 +43,8 @@ class MCPClient:
         await self.close()
 
     async def send_request(self, command: str, args: Dict[str, Any], mode: Optional[str] = None) -> Dict[str, Any]:
-        """Send an MCP request to the server."""
-        # Create an MCP request payload
+        """Send an ToolAPI request to the server."""
+        # Create an ToolAPI request payload
         request = {
             "request_id": str(uuid.uuid4()),
             "command": command,
@@ -58,11 +55,11 @@ class MCPClient:
             request["mode"] = mode
             
         try:
-            response = await self._client.post("/mcp/", json=request)
+            response = await self._client.post("/toolapi/", json=request)
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Error in MCP request: {e}", component="MCPClient")
+            logger.error(f"Error in ToolAPI request: {e}", component="ToolAPIClient")
             return {"error": {"code": "CLIENT_ERROR", "message": str(e)}}
 
 # Check if LLM pattern generation is enabled
@@ -76,7 +73,7 @@ async def generate_patterns_with_llm(
     reference_set: Dict[str, List[str]],
     num_variants: int = 5
 ) -> List[str]:
-    """Generate regex pattern variants using an LLM through MCP.
+    """Generate regex pattern variants using an LLM through ToolAPI.
     
     Args:
         pattern: The original regex pattern
@@ -88,8 +85,8 @@ async def generate_patterns_with_llm(
         List of generated regex pattern variants
     """
     try:
-        # Connect to the LLM MCP Server
-        async with MCPClient(base_url=LLM_MCP_SERVER_URL) as client:
+        # Connect to the LLM ToolAPI Server
+        async with ToolAPIClient(base_url=LLM_MCP_SERVER_URL) as client:
             positive_examples = reference_set.get("positive", [])
             negative_examples = reference_set.get("negative", [])
             
@@ -435,7 +432,8 @@ class PatternAnalyzer:
                 if simpler != pattern:
                     re.compile(simpler) # Check validity
                     variations.add(simpler)
-            except re.error: pass
+            except re.error: 
+                pass
 
             # 2. Generate more specific version
             try:
@@ -443,13 +441,16 @@ class PatternAnalyzer:
                 if specific != pattern:
                     re.compile(specific) # Check validity
                     variations.add(specific)
-            except re.error: pass
+            except re.error: 
+                pass
 
             # 3. Targeted Mutations
             mutations = []
             #   a) Swap .* and .+
-            if '.*' in pattern: mutations.append(pattern.replace('.*', '.+', 1))
-            if '.+' in pattern: mutations.append(pattern.replace('.+', '.*', 1))
+            if '.*' in pattern: 
+                mutations.append(pattern.replace('.*', '.+', 1))
+            if '.+' in pattern: 
+                mutations.append(pattern.replace('.+', '.*', 1))
             
             #   b) Add/Remove specific word boundaries (example: around 'ERROR')
             if '\\bERROR\\b' in pattern: 
@@ -470,7 +471,8 @@ class PatternAnalyzer:
                     try:
                         re.compile(mut) # Check validity
                         variations.add(mut)
-                    except re.error: pass
+                    except re.error: 
+                        pass
         else:
             # For literal patterns (unchanged)
             words = pattern.split()

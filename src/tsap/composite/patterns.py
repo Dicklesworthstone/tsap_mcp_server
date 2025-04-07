@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, validator
 
 from tsap.utils.logging import logger
 from tsap.utils.errors import TSAPError
-from tsap.mcp.models import SearchPattern
+from tsap.toolapi.models import SearchPattern
 from tsap.storage.pattern_store import get_popular_patterns, add_pattern
 
 

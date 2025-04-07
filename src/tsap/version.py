@@ -1,5 +1,8 @@
 """
-Version information for TSAP MCP Server.
+Version information for TSAP ToolAPI Server.
+
+This module provides version information for the TSAP ToolAPI Server,
+which can be used for compatibility checking and logging.
 """
 
 # Version of the TSAP package

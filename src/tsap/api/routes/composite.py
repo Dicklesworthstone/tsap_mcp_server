@@ -407,7 +407,7 @@ async def generate_diff(
         
         # Call the composite operation
         from tsap.composite.diff_generator import generate_diff
-        from tsap.mcp.models import DiffGeneratorParams
+        from tsap.toolapi.models import DiffGeneratorParams
         result = await generate_diff(DiffGeneratorParams(**params_dict))
         
         execution_time = time.time() - start_time
@@ -524,7 +524,7 @@ async def profile_document(
         
         # Call the composite operation
         from tsap.composite.document_profiler import profile_document
-        from tsap.mcp.models import DocumentProfilerParams
+        from tsap.toolapi.models import DocumentProfilerParams
         
         params = DocumentProfilerParams(
             document_path=request.document_path,

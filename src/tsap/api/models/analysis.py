@@ -6,7 +6,7 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     CodeAnalyzerParams,
     CodeAnalyzerResult,
     DocumentExplorerParams,

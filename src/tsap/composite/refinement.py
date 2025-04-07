@@ -13,7 +13,7 @@ from tsap.utils.logging import logger
 from tsap.composite.base import CompositeOperation, register_operation, CompositeError
 from tsap.core.ripgrep import ripgrep_search
 from tsap.composite.parallel import parallel_search
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     RipgrepSearchParams, RipgrepSearchResult,
     ParallelSearchParams, ParallelSearchResult,
     SearchPattern, RecursiveRefinementParams, RecursiveRefinementResult

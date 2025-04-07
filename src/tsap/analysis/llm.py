@@ -12,7 +12,7 @@ from typing import Dict, List, Any, Optional, Union
 
 from tsap.utils.logging import logger
 from tsap.analysis.base import BaseAnalysisTool, register_analysis_tool, AnalysisContext
-from tsap.mcp.models import LLMAnalysisParams, LLMAnalysisResult
+from tsap.toolapi.models import LLMAnalysisParams, LLMAnalysisResult
 
 
 @register_analysis_tool("llm_analyzer")

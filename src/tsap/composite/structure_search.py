@@ -18,7 +18,7 @@ from tsap.composite.structure import (
     DocumentStructure,
     StructuralModel
 )
-from tsap.mcp.models import StructureSearchParams, StructureSearchResult
+from tsap.toolapi.models import StructureSearchParams, StructureSearchResult
 
 
 @dataclass
@@ -590,7 +590,7 @@ async def _search_with_ripgrep(
     Returns:
         List of matches
     """
-    from tsap.mcp.models import RipgrepSearchParams
+    from tsap.toolapi.models import RipgrepSearchParams
     
     # Create search parameters
     params = RipgrepSearchParams(

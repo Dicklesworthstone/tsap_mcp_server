@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
 from rich.console import Console
-from api_client import TSAPClient, API_KEY # Import from our client module
+from tsap.toolapi import ToolAPIClient  # Import from the library
 
 console = Console()
 
@@ -22,14 +22,12 @@ DOCUMENTS_TO_PROFILE = [
 ]
 
 # --- Main Profiling Function ---
-async def run_batch_profiling(client: TSAPClient, paths: List[str]):
+async def run_batch_profiling(client: ToolAPIClient, paths: List[str]):
     """Runs batch document profiling and comparison."""
     rich_print(Panel("[bold blue]Starting Batch Document Profiling & Comparison...[/bold blue]", expand=False))
     rich_print(f"Profiling {len(paths)} documents.")
 
     # --- Define Request Payload ---
-    # Uses the /api/composite/batch_profile endpoint
-    # Based on api/models/composite.py (BatchProfileRequest) and api/routes/composite.py
     request_payload = {
         "document_paths": paths,
         "include_content_features": True, # Required for meaningful comparison
@@ -43,20 +41,21 @@ async def run_batch_profiling(client: TSAPClient, paths: List[str]):
     rich_print(Syntax(json.dumps(request_payload, indent=2), "json", theme="default"))
 
     # --- Make API Call ---
-    response = await client.post("api/composite/batch_profile", payload=request_payload)
+    response = await client.send_request("document_profile", request_payload)
 
     # --- Process Response ---
-    if not response or "error" in response:
+    if not response or response.get("status") != "success":
         rich_print("[bold red]Batch profiling request failed.[/bold red]", response)
         return
 
-    if "profiles" not in response:
-         rich_print("[bold red]Unexpected response format:[/bold red]", response)
+    data = response.get("data", {})
+    if "profiles" not in data:
+         rich_print("[bold red]Unexpected response format:[/bold red]", data)
          return
 
-    profiles = response.get("profiles", {})
-    comparisons = response.get("comparisons", {})
-    clustering = response.get("clustering") # May be None if not requested or failed
+    profiles = data.get("profiles", {})
+    comparisons = data.get("comparisons", {})
+    clustering = data.get("clustering") # May be None if not requested or failed
 
     num_profiles = len(profiles)
     num_comparisons = len(comparisons)
@@ -144,10 +143,17 @@ async def main():
         rich_print("Please create them or update the DOCUMENTS_TO_PROFILE list.")
         return
 
-    if API_KEY == "your-default-api-key":
-        rich_print("[bold yellow]Warning:[/bold yellow] Using default API key. Set the TSAP_API_KEY environment variable.")
-
-    async with TSAPClient() as client:
+    async with ToolAPIClient() as client:
+        # Check server health
+        rich_print(f"Attempting to get server info from {client.base_url}...")
+        info = await client.info()
+        if info.get("status") != "success" or info.get("error") is not None:
+            rich_print("[bold red]ToolAPI server check failed. Make sure the ToolAPI server is running.[/bold red]")
+            rich_print(f"Info response: {info}")
+            return
+        else:
+            rich_print("[green]ToolAPI server check successful.[/green]")
+            
         await run_batch_profiling(client, paths=DOCUMENTS_TO_PROFILE)
 
 if __name__ == "__main__":

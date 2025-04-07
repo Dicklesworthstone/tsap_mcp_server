@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
 from tsap.utils.logging import logger
-from tsap.mcp.models import DiffGeneratorParams, DiffGeneratorResult, DiffChunk
+from tsap.toolapi.models import DiffGeneratorParams, DiffGeneratorResult, DiffChunk
 
 
 @dataclass

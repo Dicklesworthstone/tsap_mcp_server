@@ -15,7 +15,7 @@ import asyncio
 from tsap.utils.logging import logger
 from tsap.core.pdf_extractor import extract_pdf_text
 from tsap.core.html_processor import extract_html_text
-from tsap.mcp.models import DocumentProfilerParams, DocumentProfilerResult
+from tsap.toolapi.models import DocumentProfilerParams, DocumentProfilerResult
 
 
 class DocumentProfile:

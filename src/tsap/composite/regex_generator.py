@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from collections import Counter
 
 from tsap.utils.logging import logger
-from tsap.mcp.models import RegexGeneratorParams, RegexGeneratorResult
+from tsap.toolapi.models import RegexGeneratorParams, RegexGeneratorResult
 
 
 @dataclass

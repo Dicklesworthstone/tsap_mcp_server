@@ -14,7 +14,7 @@ from tsap.utils.logging import logger
 from tsap.config import get_config
 from tsap.performance_mode import get_parameter
 from tsap.core.base import BaseCoreTool, register_tool
-from tsap.mcp.models import AwkProcessParams, AwkProcessResult
+from tsap.toolapi.models import AwkProcessParams, AwkProcessResult
 
 
 @register_tool("awk")

@@ -1,13 +1,39 @@
 """
-API models package for the TSAP MCP Server API.
+API models package for the TSAP ToolAPI Server API.
 
-This package contains Pydantic models specific to the API layer,
-distinct from the MCP protocol models defined in tsap.mcp.models.
+This package defines Pydantic models used in the public REST API,
+distinct from the ToolAPI protocol models defined in tsap.toolapi.models.
 """
 
 # Common response models
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, List, Optional
+
+# Import specific model definitions
+# Auth models
+from .auth import ApiKeyResponse, ApiKeyRequest, ApiKeyList
+
+# Core models
+from .core import (
+    AsyncJobResponse, CoreJobStatusResponse,
+    RipgrepSearchRequest, RipgrepSearchResponse,
+    AwkProcessRequest, AwkProcessResponse,
+    JqQueryRequest, JqQueryResponse,
+    SqliteQueryRequest, SqliteQueryResponse,
+    HtmlProcessRequest, HtmlProcessResponse,
+    PdfExtractRequest, PdfExtractResponse,
+    TableProcessRequest, TableProcessResponse
+)
+
+# Analysis models
+from .analysis import (
+    CodeAnalysisRequest, CodeAnalysisResponse,
+    DocumentExplorationRequest, DocumentExplorationResponse,
+    CorpusCartographyRequest, CorpusCartographyResponse,
+    CounterfactualAnalysisRequest, CounterfactualAnalysisResponse,
+    StrategyCompilationRequest, StrategyCompilationResponse,
+    AnalysisJobStatusResponse
+)
 
 
 class ErrorResponse(BaseModel):
@@ -33,3 +59,31 @@ class PaginatedResponse(BaseModel):
     page: int = Field(..., description="Current page number")
     page_size: int = Field(..., description="Page size")
     pages: int = Field(..., description="Total number of pages")
+
+
+# Define exported names for this package
+__all__ = [
+    # Auth models
+    'ApiKeyResponse', 'ApiKeyRequest', 'ApiKeyList',
+    
+    # Core models
+    'AsyncJobResponse', 'CoreJobStatusResponse',
+    'RipgrepSearchRequest', 'RipgrepSearchResponse',
+    'AwkProcessRequest', 'AwkProcessResponse',
+    'JqQueryRequest', 'JqQueryResponse',
+    'SqliteQueryRequest', 'SqliteQueryResponse',
+    'HtmlProcessRequest', 'HtmlProcessResponse',
+    'PdfExtractRequest', 'PdfExtractResponse',
+    'TableProcessRequest', 'TableProcessResponse',
+    
+    # Analysis models
+    'CodeAnalysisRequest', 'CodeAnalysisResponse',
+    'DocumentExplorationRequest', 'DocumentExplorationResponse',
+    'CorpusCartographyRequest', 'CorpusCartographyResponse',
+    'CounterfactualAnalysisRequest', 'CounterfactualAnalysisResponse',
+    'StrategyCompilationRequest', 'StrategyCompilationResponse',
+    'AnalysisJobStatusResponse',
+    
+    # Models defined in this file
+    'ErrorResponse', 'APIResponse', 'PaginatedResponse'
+]

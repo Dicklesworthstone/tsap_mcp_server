@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 import tsap.utils.logging as logging
 from tsap.core.base import BaseCoreTool, register_tool
 from tsap.utils.errors import TSAPError
-from tsap.mcp.models import TableProcessParams, TableProcessResult, TableTransformParams
+from tsap.toolapi.models import TableProcessParams, TableProcessResult, TableTransformParams
 
 
 # Define a dictionary of safe built-ins to allow in eval expressions

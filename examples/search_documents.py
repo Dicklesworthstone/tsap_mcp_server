@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Search Documents Example
+Search Document Example Script
 
-This script searches for MCP-related content in the example documents.
+This script searches for ToolAPI-related content in the example documents.
+It demonstrates basic ripgrep functionality through the TSAP ToolAPI interface.
 """
 import asyncio
 import json
@@ -15,7 +16,7 @@ from rich.table import Table
 from rich.syntax import Syntax
 from rich.console import Console
 
-from tsap.mcp import MCPClient
+from tsap.toolapi import ToolAPIClient
 
 console = Console()
 
@@ -25,7 +26,7 @@ async def search_documents(pattern: str, paths: list[str], file_patterns: list[s
     rich_print(f"Paths: {paths}\nFile Patterns: {file_patterns}\nContext: {context_lines}")
     
     try:
-        async with MCPClient() as client:
+        async with ToolAPIClient() as client:
             # --- Add initial info check ---
             console.print(f"Attempting to get server info from {client.base_url}...")
             info = await client.info()
@@ -106,12 +107,12 @@ async def search_documents(pattern: str, paths: list[str], file_patterns: list[s
 
 if __name__ == "__main__":
     # --- Add Argument Parsing ---
-    parser = argparse.ArgumentParser(description="Search documents using TSAP Ripgrep via MCPClient.")
+    parser = argparse.ArgumentParser(description="Search documents using TSAP Ripgrep via ToolAPIClient.")
     parser.add_argument(
-        "-p", "--pattern",
+        "--pattern",
         type=str,
-        default="MCP",
-        help="The text pattern to search for (default: MCP)"
+        default="data",
+        help="The text pattern to search for (default: data)"
     )
     parser.add_argument(
         "--paths",

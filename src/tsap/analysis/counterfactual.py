@@ -9,7 +9,7 @@ from typing import Dict, List, Any
 
 from tsap.utils.logging import logger
 from tsap.analysis.base import BaseAnalysisTool, register_analysis_tool, AnalysisContext
-from tsap.mcp.models import CounterfactualAnalyzerParams, CounterfactualAnalyzerResult, Counterfactual
+from tsap.toolapi.models import CounterfactualAnalyzerParams, CounterfactualAnalyzerResult, Counterfactual
 from tsap.core.ripgrep import ripgrep_search
 
 

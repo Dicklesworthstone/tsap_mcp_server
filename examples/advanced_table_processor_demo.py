@@ -24,9 +24,9 @@ from typing import Dict, Optional
 # Assuming mcp_client_example.py is in the same directory or accessible
 # Adjust the import path if necessary
 try:
-    from tsap.mcp import MCPClient
+    from tsap.toolapi import ToolAPIClient
 except ImportError:
-    print("Error: Could not import MCPClient. Make sure mcp_client_example.py is accessible.")
+    print("Error: Could not import ToolAPIClient. Make sure mcp_client_example.py is accessible.")
     sys.exit(1)
 
 console = Console()
@@ -68,8 +68,8 @@ async def table_processor_demo():
 
     # Create our client
     try:
-        debug_print("Creating MCPClient...")
-        async with MCPClient() as client:
+        debug_print("Creating ToolAPIClient...")
+        async with ToolAPIClient() as client:
             debug_print("Running demos...")
 
             # --- Add initial info check ---
@@ -586,7 +586,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         console.print("\n[yellow]Demo interrupted by user[/yellow]")
     except NameError as e:
-        if 'MCPClient' in str(e):
+        if 'ToolAPIClient' in str(e):
              # Import error already handled at the top
              pass
         else:

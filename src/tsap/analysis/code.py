@@ -13,7 +13,7 @@ import tempfile
 from tsap.utils.logging import logger
 from tsap.core.ripgrep import ripgrep_search
 from tsap.composite.parallel import parallel_search
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     CodeAnalyzerParams, CodeAnalyzerResult,
     RipgrepSearchParams, ParallelSearchParams, SearchPattern
 )

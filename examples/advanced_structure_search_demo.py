@@ -19,8 +19,8 @@ from rich.progress import Progress
 from rich.tree import Tree
 from typing import List
 
-# Import the MCP client from the library
-from tsap.mcp import MCPClient
+# Import the ToolAPI client from the library
+from tsap.toolapi import ToolAPIClient
 
 # --- Path Setup --- #
 # Add the project root and src directory to the Python path
@@ -52,7 +52,7 @@ def debug_print(msg):
         console.print(f"[dim][DEBUG] {msg}[/dim]")
 
 def safe_extract(response):
-    """Safely extract data from an MCP response without risking None returns.
+    """Safely extract data from an ToolAPI response without risking None returns.
     
     Args:
         response: The API response dictionary
@@ -419,8 +419,8 @@ console.log(sortNumbers(numbers));  // Output: [1, 2, 5, 5, 6, 9]
 
     # Create our client
     try:
-        debug_print("Creating MCPClient...")
-        async with MCPClient() as client:
+        debug_print("Creating ToolAPIClient...")
+        async with ToolAPIClient() as client:
             debug_print("Running demos...")
 
             # Initial server info check
@@ -510,7 +510,7 @@ console.log(sortNumbers(numbers));  // Output: [1, 2, 5, 5, 6, 9]
         console.print(traceback.format_exc())
 
 async def run_basic_search_demo(
-    client: MCPClient,
+    client: ToolAPIClient,
     sample_files: List[Path],
     console: Console = console
 ):

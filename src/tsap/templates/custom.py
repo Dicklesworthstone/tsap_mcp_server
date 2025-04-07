@@ -1,9 +1,8 @@
 """
-Custom templates module for TSAP MCP Server.
+Custom templates module for TSAP ToolAPI Server.
 
-This module is intended to be extended by users to define their own custom
-templates for specific search, analysis, or processing workflows. Templates
-registered here will be automatically discovered by the template system.
+This module provides a mechanism for registering custom templates
+that can be dynamically loaded at runtime.
 """
 
 

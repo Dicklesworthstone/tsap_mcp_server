@@ -11,7 +11,7 @@ from collections import defaultdict
 
 from tsap.utils.logging import logger
 from tsap.analysis.base import BaseAnalysisTool, register_analysis_tool, AnalysisContext
-from tsap.mcp.models import MetadataExtractorParams, MetadataExtractorResult, ExtractedMetadata
+from tsap.toolapi.models import MetadataExtractorParams, MetadataExtractorResult, ExtractedMetadata
 from tsap.composite.parallel import parallel_search
 
 

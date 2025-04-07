@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 try:
     # Import necessary components
-    from tsap.mcp import MCPClient
+    from tsap.toolapi import ToolAPIClient
 except ImportError as e:
     rich_print(f"[bold red]Error: Failed to import required modules: {e}[/bold red]")
     rich_print("[yellow]Make sure you're running from the TSAP project root, the virtual environment is activated, and mcp_client_example.py exists.[/yellow]")
@@ -106,7 +106,7 @@ class CodeLinesCounterPlugin:
             "active": self.active
         }
     
-    # Removed MCPClient from signature as it's no longer used for core counting
+    # Removed ToolAPIClient from signature as it's no longer used for core counting
     async def analyze_code(self, file_paths: List[str], **kwargs) -> Dict[str, Any]:
         """Analyze code files and count lines by language locally.
         
@@ -224,8 +224,8 @@ def create_and_register_plugin():
     
     return plugin
 
-# Updated signature to REMOVE MCPClient as analyze_code no longer needs it
-async def run_plugin_analysis(client: MCPClient, directory: str):
+# Updated signature to REMOVE ToolAPIClient as analyze_code no longer needs it
+async def run_plugin_analysis(client: ToolAPIClient, directory: str):
     """Run analysis using the plugin (fetches file list via client)."""
     rich_print(Rule("[bold yellow]Running Plugin Analysis (via Server File List)[/bold yellow]"))
     
@@ -234,7 +234,7 @@ async def run_plugin_analysis(client: MCPClient, directory: str):
     #     rich_print(f"[bold red]Error: Directory '{directory}' not found[/bold red]")
     #     return
     
-    # Get list of files using MCPClient and ripgrep
+    # Get list of files using ToolAPIClient and ripgrep
     file_paths = []
     try:
         rich_print(f"[dim]Querying server for files in '{directory}'...[/dim]")
@@ -246,9 +246,13 @@ async def run_plugin_analysis(client: MCPClient, directory: str):
             stats=False # Don't need stats, just paths
         )
 
+        # Print detailed debugging info about the response
+        rich_print(f"[dim]Response from ripgrep_search: status={response.get('status')}, has_data={'data' in response}, has_matches={'data' in response and 'matches' in response['data']}[/dim]")
+        
         if response.get("status") != "success" or "data" not in response or "matches" not in response["data"]:
             error_msg = response.get("error", {}).get("message", "Unknown error")
             rich_print(f"[bold red]Error fetching file list from server: {error_msg}[/bold red]")
+            rich_print(f"[dim]Full response: {response}[/dim]")
             return
 
         # Extract unique file paths from matches
@@ -430,21 +434,17 @@ async def main():
     plugin = create_and_register_plugin()
     
     try:
-        # Create MCPClient and run analysis
-        async with MCPClient() as client:
-             # Optional: Check client connection
-             try:
-                 info = await client.info()
-                 if info.get("status") != "success":
-                    rich_print(f"[bold red]Failed to connect to MCP Server: {info.get('error', 'Unknown error')}[/bold red]")
-                    return # Exit if connection failed
-                 rich_print("[green]Connected to MCP Server.[/green]")
-             except Exception as conn_err:
-                 rich_print(f"[bold red]Error connecting to MCP Server: {conn_err}[/bold red]")
-                 return # Exit if connection failed
+        # Create ToolAPIClient and run analysis
+        async with ToolAPIClient() as client:
+            # Verify server connection
+            info = await client.info()
+            if info.get("status") != "success" or info.get("error") is not None:
+                rich_print(f"[bold red]Failed to connect to ToolAPI Server: {info.get('error', 'Unknown error')}[/bold red]")
+                return
+            rich_print("[green]Connected to ToolAPI Server.[/green]")
 
-             # Use the plugin to analyze code, passing the client
-             await run_plugin_analysis(client, target_dir) 
+            # Use the plugin to analyze code, passing the client
+            await run_plugin_analysis(client, target_dir)
              
     except Exception as e:
         rich_print(f"[bold red]Error during client operation or analysis: {e}[/bold red]")

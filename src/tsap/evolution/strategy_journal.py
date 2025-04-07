@@ -19,7 +19,7 @@ from pathlib import Path
 from tsap.utils.logging import logger
 from tsap.config import get_config
 from tsap.utils.errors import TSAPError
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     StrategyJournalParams, 
     StrategyJournalResult, 
     StrategyJournalEntry

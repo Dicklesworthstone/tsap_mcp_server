@@ -11,7 +11,7 @@ import json
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
-from tsap.mcp.models import RuntimeLearningParams, RuntimeLearningResult
+from tsap.toolapi.models import RuntimeLearningParams, RuntimeLearningResult
 from tsap.evolution.pattern_analyzer import PatternAnalyzer, analyze_pattern
 from tsap.evolution.genetic import evolve_regex_pattern
 from tsap.utils.errors import TSAPError

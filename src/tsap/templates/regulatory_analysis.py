@@ -21,7 +21,7 @@ from tsap.templates.base import (
 from tsap.composite.parallel import parallel_search, ParallelSearchParams, SearchPattern
 from tsap.composite.diff_generator import generate_diff, DiffGeneratorParams
 from tsap.composite.context import extract_context, ContextExtractParams
-from tsap.mcp.models import DiffChunk
+from tsap.toolapi.models import DiffChunk
 
 @template_decorator(
     name="regulatory_analysis",

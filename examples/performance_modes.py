@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from tsap.mcp import MCPClient
+from tsap.toolapi import ToolAPIClient
 
 # Create console instance
 console = Console()
@@ -29,7 +29,7 @@ MODE_DESCRIPTIONS = {
     "deep": "Thorough analysis prioritizing comprehensive results over performance"
 }
 
-async def benchmark_ripgrep_search(client: MCPClient, mode: str) -> Dict[str, Any]:
+async def benchmark_ripgrep_search(client: ToolAPIClient, mode: str) -> Dict[str, Any]:
     """Benchmark ripgrep search with specified performance mode."""
     rich_print(f"\n[bold cyan]Running ripgrep search in [bold]{mode}[/bold] mode...[/bold cyan]")
     
@@ -66,7 +66,7 @@ async def benchmark_ripgrep_search(client: MCPClient, mode: str) -> Dict[str, An
         "success": response.get("status") == "success"
     }
 
-async def compare_performance_modes(client: MCPClient, operations: List[str] = None, iterations: int = 1):
+async def compare_performance_modes(client: ToolAPIClient, operations: List[str] = None, iterations: int = 1):
     """Compare different performance modes for various operations."""
     if operations is None:
         operations = ["ripgrep"]
@@ -163,7 +163,7 @@ async def main():
     ))
     
     try:
-        async with MCPClient() as client:
+        async with ToolAPIClient() as client:
             # --- Restored initial info check ---
             # Check if the server is running
             rich_print(f"Attempting to get server info from {client.base_url}...") # Debug print

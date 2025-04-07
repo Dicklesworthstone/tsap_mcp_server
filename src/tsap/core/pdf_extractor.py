@@ -24,7 +24,7 @@ except ImportError:
 from tsap.utils.logging import logger
 from tsap.performance_mode import get_parameter
 from tsap.core.base import BaseCoreTool, register_tool
-from tsap.mcp.models import PdfExtractParams, PdfExtractResult
+from tsap.toolapi.models import PdfExtractParams, PdfExtractResult
 
 
 @register_tool("pdf_extractor")

@@ -34,7 +34,7 @@ playwright_available = importlib.util.find_spec("playwright") is not None
 from tsap.utils.logging import logger  # noqa: E402
 from tsap.performance_mode import get_parameter  # noqa: E402
 from tsap.core.base import BaseCoreTool, register_tool  # noqa: E402
-from tsap.mcp.models import HtmlProcessParams, HtmlProcessResult  # noqa: E402
+from tsap.toolapi.models import HtmlProcessParams, HtmlProcessResult  # noqa: E402
 
 # Constants
 PLAYWRIGHT_INSTALL_CMD = ["python", "-m", "playwright", "install", "chromium"]

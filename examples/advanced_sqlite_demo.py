@@ -21,8 +21,8 @@ from rich.syntax import Syntax
 from rich.rule import Rule
 from typing import Dict, Any, List, Optional, Union
 
-# Import the MCP client from the library
-from tsap.mcp import MCPClient, DEFAULT_SERVER_URL
+# Import the ToolAPI client from the library
+from tsap.toolapi import ToolAPIClient, DEFAULT_SERVER_URL
 
 console = Console()
 
@@ -298,23 +298,23 @@ async def sqlite_demo():
     
     # Create our client
     try:
-        debug_print("Creating MCPClient...")
+        debug_print("Creating ToolAPIClient...")
         
-        # Check if MCP server is running
+        # Check if ToolAPI server is running
         try:
             import httpx
             response = await httpx.AsyncClient().get("http://localhost:8021/health")
-            debug_print(f"MCP server health check response: {response.status_code}")
+            debug_print(f"ToolAPI server health check response: {response.status_code}")
             if response.status_code != 200:
-                console.print("[bold red]MCP server is not responding correctly. Make sure it's running.[/bold red]")
+                console.print("[bold red]ToolAPI server is not responding correctly. Make sure it's running.[/bold red]")
                 return
         except Exception as e:
-            console.print(f"[bold red]Error connecting to MCP server: {str(e)}[/bold red]")
-            console.print("[yellow]Make sure the MCP server is running on http://localhost:8021[/yellow]")
+            console.print(f"[bold red]Error connecting to ToolAPI server: {str(e)}[/bold red]")
+            console.print("[yellow]Make sure the ToolAPI server is running on http://localhost:8021[/yellow]")
             return
         
         # Create the client
-        async with MCPClient() as client:
+        async with ToolAPIClient() as client:
             debug_print(f"Client created with base_url: {client.base_url}")
             
             # --- Add initial info check ---
@@ -347,7 +347,7 @@ async def sqlite_demo():
                 debug_print("DEBUG mode: Only running database creation")
                 
                 # Test basic query function directly
-                console.print("[bold]Testing basic SQLite query via MCP client...[/bold]")
+                console.print("[bold]Testing basic SQLite query via ToolAPI client...[/bold]")
                 test_query = "SELECT name FROM sqlite_master WHERE type='table'"
                 test_response = await client.sqlite_query(
                     query=test_query,
@@ -798,7 +798,7 @@ async def run_demo(
     """Execute a SQL query and display the results.
     
     Args:
-        client: The MCPClient instance
+        client: The ToolAPIClient instance
         title: Title for the demo section (optional)
         description: Description text for the demo (optional)
         query: SQL query to execute
@@ -866,7 +866,7 @@ async def run_demo(
         import traceback
         console.print(traceback.format_exc())
 
-async def run_main_demo(client: MCPClient):
+async def run_main_demo(client: ToolAPIClient):
     """Run the SQLite demo."""
     console.print(Panel("[bold blue]TSAP SQLite Query Advanced Demo[/bold blue]", subtitle="Demonstrating SQLite database interactions"))
     
@@ -920,7 +920,7 @@ if __name__ == "__main__":
         debug_print("Debug mode enabled")
     
     try:
-        debug_print("Creating MCPClient...")
+        debug_print("Creating ToolAPIClient...")
         asyncio.run(sqlite_demo())
     except KeyboardInterrupt:
         console.print("[yellow]Demo interrupted by user[/yellow]")

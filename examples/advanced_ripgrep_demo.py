@@ -14,11 +14,9 @@ from rich.table import Table
 from rich.syntax import Syntax
 from rich.console import Console
 from rich.rule import Rule
-from rich.progress import Progress
-from typing import Dict, Any, List, Optional
 
-# Import MCPClient from the library instead of the example file
-from tsap.mcp import MCPClient
+# Import ToolAPIClient from the library instead of the example file
+from tsap.toolapi import ToolAPIClient
 
 console = Console()
 
@@ -39,8 +37,8 @@ async def ripgrep_demo():
     
     # Create our client
     try:
-        debug_print("Creating MCPClient...")
-        async with MCPClient() as client:
+        debug_print("Creating ToolAPIClient...")
+        async with ToolAPIClient() as client:
             debug_print("Running demos...")
             
             # --- Add initial info check ---
@@ -61,7 +59,7 @@ async def ripgrep_demo():
                 client,
                 None,  # Handled manually above
                 None,  # Handled manually above
-                pattern="MCP",
+                pattern="ToolAPI",
                 paths=["tsap_example_data/documents/"],
                 file_patterns=["*.md", "*.txt"],
                 context_lines=2,

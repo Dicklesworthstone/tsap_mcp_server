@@ -12,7 +12,7 @@ from collections import defaultdict
 
 from tsap.utils.logging import logger
 from tsap.analysis.base import BaseAnalysisTool, register_analysis_tool, AnalysisContext
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     StrategyCompilerParams,
     StrategyCompilerResult,
     StrategyOperation,

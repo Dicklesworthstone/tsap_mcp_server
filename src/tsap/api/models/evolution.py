@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from enum import Enum
 
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     StrategyEvolutionParams, StrategyEvolutionResult,
     PatternLibraryParams, StrategyJournalParams, StrategyJournalEntry, RuntimeLearningParams, RuntimeLearningResult,
     OfflineLearningParams, OfflineLearningResult

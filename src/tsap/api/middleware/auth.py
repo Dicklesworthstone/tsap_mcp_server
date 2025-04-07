@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status, Body, File
 
 from tsap.utils.logging import logger
 from tsap.api.dependencies import api_key_dependency, performance_mode_dependency
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     RipgrepSearchParams,
     RipgrepSearchResult,
     AwkProcessParams,

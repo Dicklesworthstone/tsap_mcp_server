@@ -20,8 +20,8 @@ from rich.text import Text
 from rich import box
 from typing import Dict, Any, Optional, Union
 
-# Import the MCP client from the library
-from tsap.mcp import MCPClient
+# Import the ToolAPI client from the library
+from tsap.toolapi import ToolAPIClient
 
 console = Console()
 
@@ -61,8 +61,8 @@ async def pdf_extractor_demo():
 
     # Create our client
     try:
-        debug_print("Creating MCPClient...")
-        async with MCPClient() as client:
+        debug_print("Creating ToolAPIClient...")
+        async with ToolAPIClient() as client:
             debug_print("Running demos...")
 
             # --- Add initial info check ---
@@ -463,7 +463,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         console.print("\n[yellow]Demo interrupted by user[/yellow]")
     except NameError as e:
-        if 'MCPClient' in str(e):
+        if 'ToolAPIClient' in str(e):
              # Import error already handled
              pass
         else:

@@ -10,7 +10,7 @@ import time
 
 from tsap.utils.logging import logger
 from tsap.core.ripgrep import ripgrep_search
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     SearchPattern, ParallelSearchParams, ParallelSearchMatch,
     ParallelSearchResult, RipgrepSearchParams
 )

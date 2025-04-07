@@ -1,0 +1,9 @@
+[2023-04-01 12:34:56] [INFO] Application started
+[2023-04-01 12:35:02] [DEBUG] Connection established to database server
+[2023-04-01 12:35:10] [ERROR] Failed to authenticate user 'john': Invalid password
+[2023-04-01 12:36:23] [WARNING] High memory usage detected: 85%
+[2023-04-01 12:40:15] [ERROR] Exception in thread "main" java.lang.NullPointerException at com.example.Main.process(Main.java:42)
+[2023-04-01 12:45:30] [INFO] Request processed successfully in 235ms
+[2023-04-01 12:46:11] [CRITICAL] Database connection lost, attempting reconnection
+[2023-04-01 12:46:15] [ERROR] Unable to connect to database: Connection refused
+[2023-04-01 12:50:22] [INFO] Server shutting down gracefully

@@ -7,57 +7,47 @@ from rich import print as rich_print
 from rich.panel import Panel
 from rich.syntax import Syntax
 
-from api_client import TSAPClient, API_KEY # Import from our client module
+from tsap.toolapi import ToolAPIClient # Import from the library
 
 # --- Configuration ---
-DATA_DIR = "tsap_example_data/large_data" # Directory with potentially large log files
+DATA_DIR = "tsap_example_data/documents" # Directory with sample documents
 
 # --- Main Incremental Example Function ---
-async def run_incremental_example(client: TSAPClient):
+async def run_incremental_example(client: ToolAPIClient):
     """Demonstrates an operation that likely uses incremental processing internally."""
     rich_print(Panel("[bold blue]Demonstrating Large Data Search (using Ripgrep)...[/bold blue]", expand=False))
-    rich_print(f"Searching for 'ERROR' in directory: {DATA_DIR}")
+    rich_print(f"Searching for 'the' in directory: {DATA_DIR}")
     rich_print("[dim]Note: TSAP handles large directories/files internally, potentially using incremental processing "
                "even if not explicitly requested via the API.[/dim]")
 
-    # --- Define Request Payload ---
+    # --- Define Request Parameters ---
     # We use ripgrep search on a directory. TSAP's ripgrep tool is expected
     # to handle large directories and files efficiently, possibly streaming results
     # or processing files one by one, which aligns with the *spirit* of incremental processing.
-    # There isn't a specific "incremental_process" API endpoint based on the provided code.
-    request_payload = {
-        "params": {
-            "pattern": "ERROR",
-            "paths": [DATA_DIR], # Target a directory
-            "case_sensitive": False,
-            "file_patterns": ["*.log"], # Specify file types if known
-            "context_lines": 1,
-            "max_total_matches": 50 # Limit results for the example output
-        },
-        "performance_mode": "standard",
-        "async_execution": False # Run sync for this example
+    search_params = {
+        "pattern": "the",
+        "paths": [DATA_DIR], # Target a directory
+        "case_sensitive": False,
+        "file_patterns": ["*.md", "*.txt"], # Specify file types if known
+        "context_lines": 1,
+        "max_total_matches": 50 # Limit results for the example output
     }
 
     rich_print("[cyan]Sending Ripgrep Request (on directory):[/cyan]")
-    rich_print(Syntax(json.dumps(request_payload, indent=2), "json", theme="default"))
+    rich_print(Syntax(json.dumps(search_params, indent=2), "json", theme="default"))
 
-    # --- Make API Call ---
-    # Using the core ripgrep endpoint
-    response = await client.post("/api/core/ripgrep", payload=request_payload)
+    # --- Make API Call using ToolAPIClient ---
+    response = await client.ripgrep_search(**search_params)
 
     # --- Process Response ---
-    if not response or "error" in response:
+    if not response or response.get("status") != "success":
         rich_print("[bold red]Search request failed.[/bold red]", response)
         return
 
-    if "result" not in response:
-         rich_print("[bold red]Unexpected response format:[/bold red]", response)
-         return
-
-    search_result = response["result"]
-    matches = search_result.get("matches", [])
-    stats = search_result.get("stats", {})
-    truncated = search_result.get("truncated", False)
+    data = response.get("data", {})
+    matches = data.get("matches", [])
+    stats = data.get("stats", {})
+    truncated = data.get("truncated", False)
 
     rich_print(Panel(f"[bold green]Search Complete:[/bold green] Found {len(matches)} matches.", expand=False))
     if truncated:
@@ -88,15 +78,22 @@ async def main():
     # Ensure the example data directory exists
     if not os.path.exists(DATA_DIR):
         rich_print(f"[bold red]Error:[/bold red] Data directory '{DATA_DIR}' not found.")
-        rich_print("Please create it and add some sample .log files (e.g., data_part1.log, data_part2.log).")
+        rich_print("Please create it and add some sample text files (e.g., sample.txt, sample.md).")
         return
     if not os.listdir(DATA_DIR):
          rich_print(f"[bold yellow]Warning:[/bold yellow] Data directory '{DATA_DIR}' is empty.")
 
-    if API_KEY == "your-default-api-key":
-        rich_print("[bold yellow]Warning:[/bold yellow] Using default API key. Set the TSAP_API_KEY environment variable.")
-
-    async with TSAPClient() as client:
+    async with ToolAPIClient() as client:
+        # Check server health
+        rich_print(f"Attempting to get server info from {client.base_url}...")
+        info = await client.info()
+        if info.get("status") != "success" or info.get("error") is not None:
+            rich_print("[bold red]ToolAPI server check failed. Make sure the ToolAPI server is running.[/bold red]")
+            rich_print(f"Info response: {info}")
+            return
+        else:
+            rich_print("[green]ToolAPI server check successful.[/green]")
+            
         await run_incremental_example(client)
 
 if __name__ == "__main__":

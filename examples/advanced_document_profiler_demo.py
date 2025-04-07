@@ -37,11 +37,11 @@ if script_dir not in sys.path:
     sys.path.insert(1, script_dir)
 # --- End Path Setup ---
 
-# Import the MCP client
+# Import the ToolAPI client
 try:
-    from tsap.mcp import MCPClient
+    from tsap.toolapi import ToolAPIClient
 except ImportError as e:
-    print("Error: Could not import MCPClient or its dependencies.")
+    print("Error: Could not import ToolAPIClient or its dependencies.")
     print(f"Import Error: {e}")
     print("Make sure mcp_client_example.py is in the 'examples' directory and all dependencies are importable.")
     print(f"Current sys.path: {sys.path}")
@@ -64,9 +64,9 @@ async def document_profiler_demo():
     )
     console.print(banner)
 
-    # Setup MCP client
-    # This client will connect to the standalone MCP server which should be running
-    client = MCPClient("http://localhost:8021")
+    # Setup ToolAPI client
+    # This client will connect to the standalone ToolAPI server which should be running
+    client = ToolAPIClient("http://localhost:8021")
     
     # Check client connectivity
     console.print("Attempting to get server info from http://localhost:8021...")
@@ -74,8 +74,8 @@ async def document_profiler_demo():
         info = await client.info()  # noqa: F841
         console.print("Initial client.info() check successful.")
     except Exception as e:
-        console.print(f"[bold red]Error connecting to MCP server:[/bold red] {e}")
-        console.print("\nMake sure the standalone MCP server is running with:")
+        console.print(f"[bold red]Error connecting to ToolAPI server:[/bold red] {e}")
+        console.print("\nMake sure the standalone ToolAPI server is running with:")
         console.print("[blue]python examples/standalone_mcp_server.py[/blue]")
         return
 
@@ -117,7 +117,7 @@ async def run_basic_profile_demo(client, file_path="tsap_example_data/documents/
     with Progress() as progress:
         task = progress.add_task("[green]Profiling document...", total=1)
         
-        # Call MCP server to profile the document
+        # Call ToolAPI server to profile the document
         result = await client.send_request(
             "tsap.composite.document_profiler.profile_document",
             {

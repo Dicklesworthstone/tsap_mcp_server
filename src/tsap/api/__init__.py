@@ -1,5 +1,5 @@
 """
-API package for the TSAP MCP Server.
+API package for the TSAP ToolAPI Server.
 
 This package contains the FastAPI application, routes, models, 
 dependencies, and middleware for the REST API.

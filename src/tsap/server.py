@@ -1,11 +1,11 @@
 """
-TSAP MCP Server implementation.
+TSAP ToolAPI Server implementation.
 
-This module provides the main server functionality that listens for MCP
-requests and dispatches them to the appropriate handlers.
+This module provides the main server functionality that listens for ToolAPI
+protocol requests and dispatches them to the appropriate handlers.
 """
 import asyncio
-from typing import Optional, Any, Dict, Match, Pattern
+from typing import Optional, Any
 from contextlib import asynccontextmanager
 import os
 import logging
@@ -23,15 +23,14 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
 from rich import box
-from rich.syntax import Syntax
 from rich.json import JSON
 
 from tsap.utils.logging import logger
 from tsap.config import get_config
 from tsap.version import __version__, get_version_info
 from tsap.performance_mode import get_performance_mode
-from tsap.mcp.protocol import MCPRequest
-from tsap.mcp.handler import handle_request, initialize_handlers
+from tsap.toolapi.protocol import ToolAPIRequest
+from tsap.toolapi.handler import handle_request, initialize_handlers
 from tsap.api.app import api_router
 
 
@@ -430,7 +429,7 @@ async def lifespan(app: FastAPI):
         
         # Server is ready
         logger.success(
-            "TSAP MCP Server started and ready",
+            "TSAP ToolAPI Server started and ready",
             component="server",
             operation="startup"
         )
@@ -459,7 +458,7 @@ def create_server() -> FastAPI:
     
     # Create FastAPI app
     app = FastAPI(
-        title="TSAP MCP Server",
+        title="TSAP ToolAPI Server",
         description="Text Search and Processing Model Context Protocol Server",
         version=__version__,
         lifespan=lifespan,
@@ -477,7 +476,31 @@ def create_server() -> FastAPI:
     
     # Add routers
     app.include_router(api_router, prefix="/api")
-    app.include_router(_create_mcp_router(), prefix="/mcp")
+    app.include_router(_create_toolapi_router(), prefix="/toolapi")
+    
+    # Mount standards-compliant MCP server if available
+    try:
+        from tsap_mcp.server import get_mcp_app
+        app.mount("/standards-mcp", get_mcp_app())
+        console.print("[bold green]Standards-compliant MCP server mounted at /standards-mcp[/]", emoji=True)
+    except ImportError:
+        # Try importing mcp directly as a fallback
+        try:
+            import mcp  # noqa: F401
+            from mcp.server.fastmcp import FastMCP
+            mcp_app = FastMCP("TSAP").sse_app()
+            app.mount("/standards-mcp", mcp_app)
+            console.print("[bold green]Standards-compliant MCP server mounted at /standards-mcp using external MCP SDK[/]", emoji=True)
+        except ImportError:
+            # Neither internal tsap_mcp nor external mcp package is installed
+            console.print("[yellow]Standards-compliant MCP server not available (mcp package not installed)[/]", emoji=True)
+    
+    # Mount ToolAPI native endpoint if available
+    try:
+        from tsap.toolapi_integration import mount_toolapi_server
+        mount_toolapi_server(app)
+    except ImportError:
+        console.print("[yellow]ToolAPI native server not available[/]", emoji=True)
     
     # Add health check route
     @app.get("/health")
@@ -501,25 +524,25 @@ def create_server() -> FastAPI:
     return app
 
 
-def _create_mcp_router() -> APIRouter:
-    """Create the MCP protocol router.
+def _create_toolapi_router() -> APIRouter:
+    """Create the ToolAPI protocol router.
     
     Returns:
-        Configured APIRouter for the MCP protocol
+        Configured APIRouter for the ToolAPI protocol
     """
-    router = APIRouter(tags=["mcp"])
+    router = APIRouter(tags=["toolapi"])
     
     @router.post("/")
-    async def mcp_endpoint(request: MCPRequest):
-        """Main MCP protocol endpoint.
+    async def toolapi_endpoint(request: ToolAPIRequest):
+        """Main ToolAPI protocol endpoint.
         
-        This receives MCP requests and dispatches them to the appropriate handlers.
+        This receives ToolAPI requests and dispatches them to the appropriate handlers.
         
         Args:
-            request: MCP request
+            request: ToolAPI request
             
         Returns:
-            MCP response
+            ToolAPI response
         """
         # Use the truncate_repr helper for logging request details
         console.print(f"[bold blue]REQUEST RECEIVED:[/] {truncate_repr(request)}", emoji=True)
@@ -537,21 +560,21 @@ def _create_mcp_router() -> APIRouter:
                         console.print(f"  [cyan]Args:[/] {truncate_repr(request.args)} :package:", emoji=True)
                     else:
                         # Display nicely formatted JSON
-                        console.print(f"  [cyan]Args:[/] :package:", emoji=True)
+                        console.print("  [cyan]Args:[/] :package:", emoji=True)
                         console.print("    ", end="")
                         console.print(formatted_args)
-                except Exception as e:
+                except Exception:
                     # On any error, fall back to simple representation
                     console.print(f"  [cyan]Args:[/] {truncate_repr(request.args)} :package:", emoji=True)
             else:
                 # No args or empty args
-                console.print(f"  [cyan]Args:[/] None :package:", emoji=True)
+                console.print("  [cyan]Args:[/] None :package:", emoji=True)
         except Exception as e:
             console.print(f"  [cyan]Args:[/] <Error displaying args: {str(e)}> :package:", emoji=True)
 
         logger.info(
-            f"Received MCP request: {request.command}",
-            component="mcp",
+            f"Received ToolAPI request: {request.command}",
+            component="toolapi",
             operation="request",
             context={"request_id": request.request_id}
         )
@@ -596,7 +619,7 @@ def _create_mcp_router() -> APIRouter:
                             console.print(f"  [cyan]Data:[/] {truncate_repr(response.data)} :open_file_folder:", emoji=True)
                         else:
                             # Pretty format the JSON data
-                            console.print(f"  [cyan]Data:[/] :open_file_folder:", emoji=True)
+                            console.print("  [cyan]Data:[/] :open_file_folder:", emoji=True)
                             console.print("    ", end="")
                             console.print(formatted_data)
                             
@@ -632,8 +655,8 @@ def _create_mcp_router() -> APIRouter:
                     console.print(f"  [cyan]Error:[/] <Error displaying error: {str(e)}> :warning:", emoji=True)
             
             logger.success(
-                f"Completed MCP request: {request.command}",
-                component="mcp",
+                f"Completed ToolAPI request: {request.command}",
+                component="toolapi",
                 operation="response",
                 context={"request_id": request.request_id}
             )
@@ -677,7 +700,7 @@ def start_server(
     log_level: Optional[str] = None,
     reload: bool = False,
 ) -> None:
-    """Start the TSAP MCP Server using dictConfig for logging."""
+    """Start the TSAP ToolAPI Server using dictConfig for logging."""
     config = get_config()
     server_host = host or config.server.host
     server_port = port or config.server.port

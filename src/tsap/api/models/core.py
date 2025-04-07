@@ -9,7 +9,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     RipgrepSearchParams, RipgrepSearchResult,
     AwkProcessParams, AwkProcessResult,
     JqQueryParams, JqQueryResult,

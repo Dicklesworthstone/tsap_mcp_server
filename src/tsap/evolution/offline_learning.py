@@ -17,7 +17,7 @@ from tsap.utils.errors import TSAPError
 from tsap.evolution.strategy_journal import get_strategy_journal
 from tsap.evolution.pattern_library import get_pattern_library
 from tsap.evolution.genetic import evolve_regex_pattern
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     OfflineLearningParams, 
     OfflineLearningResult
 )

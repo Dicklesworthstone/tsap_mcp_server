@@ -1,15 +1,13 @@
 # examples/log_pattern_evolution.py
 import asyncio
-import json
 
 from rich import print as rich_print
 from rich.panel import Panel
-from rich.syntax import Syntax
 from rich.table import Table
 from rich.console import Console
 
 # Assuming mcp_client_example.py is in the same directory orPYTHONPATH
-from tsap.mcp import MCPClient
+from tsap.toolapi import ToolAPIClient
 
 console = Console()
 
@@ -32,40 +30,52 @@ NEGATIVE_EXAMPLES = [
 ]
 
 # --- Main Evolution Function --- 
-async def run_log_pattern_analysis(client: MCPClient):
-    """Runs pattern analysis using the MCP pattern_analyze command for log data."""
+async def run_log_pattern_analysis(client: ToolAPIClient):
+    """Runs pattern analysis using the ToolAPI pattern_analyze command for log data."""
     rich_print(Panel("[bold blue]Starting Pattern Analysis for APIService Errors...[/bold blue]", expand=False))
 
-    # --- Define MCP Command Arguments --- 
-    # Initial attempt: Find lines with ERROR followed by [APIService]
-    initial_pattern = r"ERROR.*\[APIService\].*"
+    # --- Define ToolAPI Command Arguments ---
+    # Prepare positive and negative examples
+    positive_examples = [
+        "2023-07-12T15:42:31.123Z ERROR [auth.service] Failed to authenticate user: invalid credentials", 
+        "2023-07-12T16:01:47.789Z ERROR [db.query] Database connection timeout after 30s",
+        "2023-07-12T16:12:59.456Z ERROR [api.handler] Invalid request format: missing required fields",
+        "2023-07-12T17:42:31.123Z ERROR [network] Connection reset by peer 192.168.1.45:8080",
+    ]
     
-    mcp_args = {
-        "pattern": initial_pattern,
-        "description": "Evolve pattern to find APIService errors in logs",
+    negative_examples = [
+        "2023-07-12T15:31:42.456Z INFO [system] Application startup complete",
+        "2023-07-12T15:35:11.789Z DEBUG [cache] Cache hit for key 'user_profile_1234'",
+        "2023-07-12T15:42:11.123Z WARN [auth.service] Rate limit threshold reached for IP 192.168.1.10", 
+        "System log message without timestamp",
+    ]
+    
+    # Create the request payload  
+    args = {
+        "pattern": "ERROR.*\[APIService\].*",
+        "description": "Error log pattern evolution", 
         "is_regex": True,
-        "case_sensitive": False, # Log levels might be upper/lower case
-        "reference_set": { 
-            "positive": POSITIVE_EXAMPLES,
-            "negative": NEGATIVE_EXAMPLES
+        "case_sensitive": False,
+        "reference_set": {
+            "positive": positive_examples,
+            "negative": negative_examples
         },
-        "generate_variants": True, 
-        "num_variants": 5, # Request a few variants
-        # "paths": ["examples/sample.log"], # Could use paths instead of reference_set strings, but examples are clearer for demo
+        "generate_variants": True,
+        "num_variants": 5,
     }
-
-    rich_print("[cyan]Sending Pattern Analysis Request:[/cyan]")
-    rich_print(Syntax(json.dumps(mcp_args, indent=2), "json", theme="default"))
-
-    # --- Make MCP Call --- 
+    
+    # --- Make ToolAPI Call ---
+    rich_print("Sending pattern analyze request...")
+    
+    # --- Execute ToolAPI Call --- 
     start_time = asyncio.get_event_loop().time()
-    response = await client.send_request("pattern_analyze", mcp_args)
+    response = await client.send_request("pattern_analyze", args)
     end_time = asyncio.get_event_loop().time()
     client_exec_time = end_time - start_time
 
     # --- Process Response --- 
     if not response:
-        rich_print("[bold red]MCP request failed: No response received.[/bold red]")
+        rich_print("[bold red]ToolAPI request failed: No response received.[/bold red]")
         return
 
     if response.get("status") != "success":
@@ -88,7 +98,7 @@ async def run_log_pattern_analysis(client: MCPClient):
     
     # Display stats for the initial pattern
     summary_panel = Panel(
-        f"[bold]Initial Pattern:[/bold] [green]{initial_pattern}[/green]\n"
+        f"[bold]Initial Pattern:[/bold] [green]ERROR.*\[APIService\].*[/green]\n"
         f"[bold]Precision:[/bold] {main_stats.get('precision', 0.0):.4f}\n"
         f"[bold]Recall:[/bold] {main_stats.get('recall', 0.0):.4f}\n"
         f"[bold]F1 Score:[/bold] {main_stats.get('f1_score', 0.0):.4f}\n"
@@ -129,16 +139,16 @@ async def run_log_pattern_analysis(client: MCPClient):
 # --- Main Execution --- 
 async def main():
     """Main function to run the log pattern analysis example."""
-    async with MCPClient() as client:
+    async with ToolAPIClient() as client:
         # Check server health
         rich_print(f"Attempting to get server info from {client.base_url}...")
         info = await client.info()
         if info.get("status") != "success" or info.get("error") is not None:
-            rich_print("[bold red]MCP server check failed. Make sure the MCP server is running.[/bold red]")
+            rich_print("[bold red]ToolAPI server check failed. Make sure the ToolAPI server is running.[/bold red]")
             rich_print(f"Info response: {info}")
             return
         else:
-            rich_print("[green]MCP server check successful.[/green]")
+            rich_print("[green]ToolAPI server check successful.[/green]")
             
         await run_log_pattern_analysis(client)
 

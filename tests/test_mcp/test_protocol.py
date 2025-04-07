@@ -2,7 +2,7 @@ import pytest
 import httpx
 from typing import Dict, Any
 
-from tsap.mcp.protocol import MCPRequest, MCPCommandType
+from tsap.toolapi.protocol import MCPRequest, MCPCommandType
 
 # Test client that communicates directly with the server
 class TestMCPClient:

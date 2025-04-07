@@ -13,7 +13,6 @@ from typing import Dict, List, Any
 from tsap.evolution.pattern_analyzer import analyze_pattern
 from rich import print as rich_print
 from rich.panel import Panel
-from rich.syntax import Syntax
 from rich.table import Table
 
 # Enable LLM-based pattern generation

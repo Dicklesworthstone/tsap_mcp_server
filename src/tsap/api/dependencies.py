@@ -1,5 +1,5 @@
 """
-Dependencies for FastAPI routes in the TSAP MCP Server API.
+Dependencies for FastAPI routes in the TSAP ToolAPI Server API.
 """
 
 from fastapi import Depends, HTTPException, Header, Request, status

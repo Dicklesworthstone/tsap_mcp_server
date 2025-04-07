@@ -97,8 +97,8 @@ class FilesystemError(TSAPError):
         super().__init__(message, "FILESYSTEM_ERROR", error_details)
 
 
-class MCPError(TSAPError):
-    """Error raised for MCP protocol-related issues."""
+class ToolAPIError(TSAPError):
+    """Error raised for ToolAPI protocol-related issues."""
 
     def __init__(
         self,

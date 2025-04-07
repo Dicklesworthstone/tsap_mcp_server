@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from collections import Counter, defaultdict
 
 from tsap.utils.logging import logger
-from tsap.mcp.models import FilenamePatternParams, FilenamePatternResult
+from tsap.toolapi.models import FilenamePatternParams, FilenamePatternResult
 
 
 @dataclass
@@ -316,7 +316,7 @@ async def _analyze_naming_patterns(file_parts: List[Dict[str, str]]) -> Dict[str
             prefix_files = [part for part in file_parts if part["components"] and part["components"][0] == prefix]
             pattern_candidates.append(PatternCandidate(
                 pattern=f"prefix_{prefix}",
-                regex=f"^{re.escape(prefix)}[_\-\.].*",
+                regex=f"^{re.escape(prefix)}[_\\-\\.].*",
                 description=f"Files with '{prefix}' prefix",
                 examples=[part["basename"] for part in prefix_files[:5]],
                 match_count=count,
@@ -329,7 +329,7 @@ async def _analyze_naming_patterns(file_parts: List[Dict[str, str]]) -> Dict[str
             suffix_files = [part for part in file_parts if part["components"] and part["components"][-1] == suffix]
             pattern_candidates.append(PatternCandidate(
                 pattern=f"suffix_{suffix}",
-                regex=f".*[_\-\.]{re.escape(suffix)}$",
+                regex=f".*[_\\-\\.]{re.escape(suffix)}$",
                 description=f"Files with '{suffix}' suffix",
                 examples=[part["basename"] for part in suffix_files[:5]],
                 match_count=count,

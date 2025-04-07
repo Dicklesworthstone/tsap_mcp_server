@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 from tsap.utils.logging import logger
 from tsap.analysis.base import BaseAnalysisTool, register_analysis_tool, AnalysisContext
-from tsap.mcp.models import (
+from tsap.toolapi.models import (
     CorpusCartographerParams, CorpusCartographerResult
 )
 

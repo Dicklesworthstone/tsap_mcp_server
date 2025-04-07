@@ -9,18 +9,15 @@ import asyncio
 from datetime import datetime
 import os
 import sys
-import json
-import tempfile
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
 from rich.rule import Rule
-from typing import Dict, Any, List, Optional, Union
 
-# Import the MCP client from the library
-from tsap.mcp import MCPClient
+# Import the ToolAPI client from the library
+from tsap.toolapi import ToolAPIClient
 
 console = Console()
 
@@ -41,8 +38,8 @@ async def awk_demo():
 
     # Create our client
     try:
-        debug_print("Creating MCPClient...")
-        async with MCPClient() as client:
+        debug_print("Creating ToolAPIClient...")
+        async with ToolAPIClient() as client:
             debug_print("Running demos...")
 
             # --- Add initial info check ---
@@ -379,7 +376,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         console.print("\n[yellow]Demo interrupted by user[/yellow]")
     except NameError as e:
-        if 'MCPClient' in str(e):
+        if 'ToolAPIClient' in str(e):
              # Already handled the import error message
              pass
         else:

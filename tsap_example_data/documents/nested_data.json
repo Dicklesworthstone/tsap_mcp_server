@@ -24,8 +24,8 @@
         "os": "Ubuntu",
         "version": "22.04",
         "instances": [
-          {"id": "instance-a", "ip": "10.0.1.10", "status": "running"},
-          {"id": "instance-b", "ip": "10.0.1.11", "status": "stopped"}
+          { "id": "instance-a", "ip": "10.0.1.10", "status": "running" },
+          { "id": "instance-b", "ip": "10.0.1.11", "status": "stopped" }
         ]
       }
     },
@@ -35,12 +35,9 @@
       "details": {
         "language": "Python",
         "framework": "FastAPI",
-        "endpoints": [
-          {"/users": "GET"},
-          {"/items": ["GET", "POST"]}
-        ]
+        "endpoints": [{ "/users": "GET" }, { "/items": ["GET", "POST"] }]
       }
     }
   ],
   "status": "active"
-} 
+}
